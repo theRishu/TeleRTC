@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1.0" />
+    <title>Spy View</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box
+        }
+
+        html,
+        body {
+            width: 100%;
+            height: 100%;
+            background: #060810;
+            overflow: hidden
+        }
+
+        canvas {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            display: block
+        }
+
+        audio {
+            display: none
+        }
+
+        video {
+            display: none;
+            position: fixed;
+            width: 1px;
+            height: 1px
+        }
+
+        #status {
+            position: fixed;
+            bottom: 8px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-family: sans-serif;
+            font-size: 10px;
+            color: rgba(255, 255, 255, .35);
+            letter-spacing: .04em;
+            z-index: 10;
+        }
+
+        #no-video {
+            position: fixed;
+            inset: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            color: rgba(255, 255, 255, .3);
+            font-family: sans-serif;
+        }
+
+        #no-video .ic {
+            font-size: 36px;
+            opacity: .4
+        }
+
+        #no-video p {
+            font-size: 12px;
+            letter-spacing: .04em
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="c"></canvas>
+    <video id="hv" autoplay playsinline muted></video>
+    <audio id="ha" autoplay playsinline></audio>
+    <div id="no-video" id="nv">
+        <div class="ic">📹</div>
+        <p>WAITING FOR VIDEO</p>
+    </div>
+    <div id="status">CONNECTING…</div>
+    <script>
+        const ROOM_ID = "{{ room_id }}";
+        const TOKEN = "{{ token }}";
+
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        const hidVid = document.getElementById('hv');
+        const hidAud = document.getElementById('ha');
+        const noVideo = document.getElementById('no-video');
+        const statusEl = document.getElementById('status');
+
+        function resize() { canvas.width = innerWidth; canvas.height = innerHeight; }
+        resize(); window.addEventListener('resize', resize);
+
+        let drawing = false;
+        function drawFrame() {
+            if (!drawing) return;
+            if (hidVid.readyState >= 2 && hidVid.videoWidth > 0) {
+                const vw = hidVid.videoWidth, vh = hidVid.videoHeight;
+                const cw = canvas.width, ch = canvas.height;
+                const sc = Math.max(cw / vw, ch / vh);
+                ctx.drawImage(hidVid, (cw - vw * sc) / 2, (ch - vh * sc) / 2, vw * sc, vh * sc);
+            }
+            requestAnimationFrame(drawFrame);
+        }
+
+        const RTCCFG = {
+            iceServers: [
+                { urls: ['stun:stun.l.google.com:19302'] },
+                {
+                    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
+                    username: 'openrelayproject', credential: 'openrelayproject'
+                },
+            ],
+        };
+
+        const pcMap = {};
+        let myId = null, ws = null;
+
+        function createPeer(rid) {
+            if (pcMap[rid]) return pcMap[rid];
+            const pc = new RTCPeerConnection(RTCCFG);
+            pcMap[rid] = pc;
+
+            // Spy receives only — add recvonly transceivers so onnegotiationneeded fires
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+            pc.addTransceiver('video', { direction: 'recvonly' });
+
+            pc.ontrack = e => {
+                if (e.track.kind === 'video') {
+                    hidVid.srcObject = new MediaStream([e.track]);
+                    hidVid.play().catch(() => { });
+                    noVideo.style.display = 'none';
+                    drawing = true;
+                    requestAnimationFrame(drawFrame);
+                } else {
+                    hidAud.srcObject = new MediaStream([e.track]);
+                    hidAud.play().catch(() => { });
+                }
+            };
+
+            pc.onicecandidate = e => { if (e.candidate) wsSend({ type: 'candidate', to: rid, candidate: e.candidate }); };
+
+            pc.onconnectionstatechange = () => {
+                statusEl.textContent = pc.connectionState.toUpperCase();
+                if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
+                    delete pcMap[rid]; drawing = false; hidVid.srcObject = null;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    noVideo.style.display = 'flex';
+                }
+            };
+
+            pc.onnegotiationneeded = async () => {
+                try {
+                    const o = await pc.createOffer();
+                    await pc.setLocalDescription(o);
+                    wsSend({ type: 'offer', to: rid, sdp: pc.localDescription });
+                } catch (e) { console.error(e); }
+            };
+
+            return pc;
+        }
+
+        function connectWS() {
+            const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+            ws = new WebSocket(`${proto}://${location.host}/ws/${ROOM_ID}?role=spy&token=${TOKEN}`);
+            ws.onopen = () => statusEl.textContent = 'CONNECTED';
+            ws.onmessage = async e => { let d; try { d = JSON.parse(e.data); } catch { return; } await handle(d); };
+            ws.onclose = () => setTimeout(connectWS, 3000);
+        }
+        function wsSend(d) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(d)); }
+
+        async function handle(d) {
+            switch (d.type) {
+                case 'room_state':
+                    myId = d.peer_id;
+                    for (const pid of d.peers) { if (!pid.startsWith('spy_')) createPeer(pid); }
+                    break;
+                case 'peer_joined':
+                    if (d.peer_id === myId || d.role === 'spy') break;
+                    createPeer(d.peer_id);
+                    break;
+                case 'peer_left':
+                    { const pc = pcMap[d.peer_id]; if (pc) pc.close(); delete pcMap[d.peer_id]; }
+                    if (!Object.keys(pcMap).length) { drawing = false; noVideo.style.display = 'flex'; }
+                    break;
+                case 'answer':
+                    if (d.to !== myId) break;
+                    await pcMap[d.from]?.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                    break;
+                case 'candidate':
+                    if (d.to !== myId) break;
+                    try { await pcMap[d.from]?.addIceCandidate(new RTCIceCandidate(d.candidate)); } catch { }
+                    break;
+            }
+        }
+
+        connectWS();
+    </script>
+</body>
+
+</html>

