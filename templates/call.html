@@ -198,6 +198,9 @@ let facingMode = 'user', isFlipping = false;
 const pcMap = {}, candidateQueue = {};
 let myId = null, makingOffer = false;
 let inVideoMode = false;
+// Persistent streams — attached to elements during user gesture so play() always works on mobile
+const remoteStream    = new MediaStream();
+const remoteAudStream = new MediaStream();
 
 // ── Timer ─────────────────────────────────────────────
 let _s = 0, _tv = null;
@@ -326,14 +329,14 @@ function createPeer(rid, init) {
       return;
     }
     if (e.track.kind === 'video') {
-      remoteVid.srcObject = new MediaStream([e.track]);
-      remoteVid.play().catch(() => {});
-      // onunmute fires when partner starts sending video data (replaceTrack triggers this)
+      // Add to persistent stream (already playing from user gesture) — no new play() needed
+      remoteStream.getVideoTracks().forEach(t => remoteStream.removeTrack(t));
+      remoteStream.addTrack(e.track);
       e.track.onunmute = () => { if (!inVideoMode) switchToVideo(); };
       e.track.onmute   = () => { if (inVideoMode) switchToAudio(); };
     } else {
-      remoteAud.srcObject = new MediaStream([e.track]);
-      remoteAud.play().catch(() => {});
+      remoteAudStream.getAudioTracks().forEach(t => remoteAudStream.removeTrack(t));
+      remoteAudStream.addTrack(e.track);
     }
   };
 
@@ -601,9 +604,12 @@ async function startSession() {
   buildControls();
   waStatus.textContent = 'Waiting for partner…';
 
-  // Unlock audio/video autoplay inside user gesture
-  remoteVid.play().catch(()=>{});
-  remoteAud.play().catch(()=>{});
+  // Attach streams inside user gesture — this is the ONLY reliable way to unlock
+  // autoplay on iOS/Android; play() must have a srcObject when called on mobile
+  remoteVid.srcObject = remoteStream;
+  remoteAud.srcObject = remoteAudStream;
+  remoteVid.play().catch(() => {});
+  remoteAud.play().catch(() => {});
 
   await fetchIce();
 
