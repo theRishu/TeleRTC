@@ -174,7 +174,36 @@ app = FastAPI(title="TeleRTC", lifespan=lifespan)
 # ─────────────────────────────────────────────────────
 @app.get("/", response_class=HTMLResponse)
 async def root():
-    return HTMLResponse("it working")
+    return HTMLResponse("""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>TeleRTC</title>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{min-height:100vh;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:10px;
+  background:linear-gradient(145deg,#13111c,#1e1532,#0d1a2e);
+  font-family:'Inter',system-ui,sans-serif;color:#fff;
+  -webkit-font-smoothing:antialiased}
+.badge{display:flex;align-items:center;gap:8px;
+  background:rgba(0,232,122,.08);border:1px solid rgba(0,232,122,.25);
+  border-radius:100px;padding:5px 16px;font-size:11px;font-weight:700;
+  letter-spacing:.06em;color:#00e87a;text-transform:uppercase;margin-bottom:8px}
+.dot{width:7px;height:7px;border-radius:50%;background:#00e87a;
+  animation:p 1.4s ease-in-out infinite}
+@keyframes p{0%,100%{opacity:1}50%{opacity:.2}}
+h1{font-size:28px;font-weight:800;letter-spacing:-.03em}
+p{font-size:14px;color:rgba(255,255,255,.45)}
+</style>
+</head>
+<body>
+<div class="badge"><span class="dot"></span> Online</div>
+<h1>TeleRTC</h1>
+<p>Telegram WebRTC Video Call Server</p>
+</body>
+</html>""")
 
 
 # ─────────────────────────────────────────────────────
