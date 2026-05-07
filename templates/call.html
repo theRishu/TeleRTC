@@ -198,9 +198,6 @@ let facingMode = 'user', isFlipping = false;
 const pcMap = {}, candidateQueue = {};
 let myId = null, makingOffer = false;
 let inVideoMode = false;
-// Persistent streams — attached to elements during user gesture so play() always works on mobile
-const remoteStream    = new MediaStream();
-const remoteAudStream = new MediaStream();
 
 // ── Timer ─────────────────────────────────────────────
 let _s = 0, _tv = null;
@@ -329,14 +326,13 @@ function createPeer(rid, init) {
       return;
     }
     if (e.track.kind === 'video') {
-      // Add to persistent stream (already playing from user gesture) — no new play() needed
-      remoteStream.getVideoTracks().forEach(t => remoteStream.removeTrack(t));
-      remoteStream.addTrack(e.track);
+      remoteVid.srcObject = new MediaStream([e.track]);
+      remoteVid.play().catch(() => {});
       e.track.onunmute = () => { if (!inVideoMode) switchToVideo(); };
       e.track.onmute   = () => { if (inVideoMode) switchToAudio(); };
     } else {
-      remoteAudStream.getAudioTracks().forEach(t => remoteAudStream.removeTrack(t));
-      remoteAudStream.addTrack(e.track);
+      remoteAud.srcObject = new MediaStream([e.track]);
+      remoteAud.play().catch(() => {});
     }
   };
 
@@ -604,10 +600,10 @@ async function startSession() {
   buildControls();
   waStatus.textContent = 'Waiting for partner…';
 
-  // Attach streams inside user gesture — this is the ONLY reliable way to unlock
-  // autoplay on iOS/Android; play() must have a srcObject when called on mobile
-  remoteVid.srcObject = remoteStream;
-  remoteAud.srcObject = remoteAudStream;
+  // Unlock autoplay on mobile: set empty srcObject and play() during user gesture.
+  // Once unlocked, future play() calls on these elements work outside gestures too.
+  remoteVid.srcObject = new MediaStream();
+  remoteAud.srcObject = new MediaStream();
   remoteVid.play().catch(() => {});
   remoteAud.play().catch(() => {});
 
