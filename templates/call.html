@@ -247,20 +247,26 @@ async function boostBitrate(pc) {
 }
 
 // ── Video view switch ─────────────────────────────────
-// remoteVid.onresize fires when actual frames arrive (videoWidth > 0)
+// onresize fires when first frame arrives — reliable on desktop Chrome
 remoteVid.onresize = () => {
   if (remoteVid.videoWidth > 0 && !inVideoMode) switchToVideo();
 };
-// Also handle when remote turns OFF camera — switch back to audio view
-function checkRemoteVideoGone() {
-  if (remoteVid.videoWidth === 0 && inVideoMode) switchToAudio();
-}
-setInterval(checkRemoteVideoGone, 2000);
+// Fallback poll — covers iOS WebKit and Telegram WebView where onresize is flaky
+let _vgone = 0;
+setInterval(() => {
+  if (!inVideoMode && remoteVid.videoWidth > 0) { _vgone = 0; switchToVideo(); }
+  else if (inVideoMode) {
+    if (remoteVid.videoWidth === 0) { if (++_vgone >= 2) switchToAudio(); }
+    else _vgone = 0;
+  }
+}, 1000);
 
 function switchToVideo() {
   inVideoMode = true;
+  _vgone = 0;
   audioBg.style.display = 'none';
   remoteVid.classList.add('active');
+  remoteVid.play().catch(() => {});
   vidTop.classList.add('show');
   if (!_tv) startTimer();
   schedHide();
@@ -270,7 +276,8 @@ function switchToAudio() {
   inVideoMode = false;
   audioBg.style.display = 'flex';
   remoteVid.classList.remove('active');
-  remoteVid.srcObject = null;
+  // Keep srcObject — ontrack fires once per transceiver lifetime; nulling it means
+  // we can never detect video again after partner turns cam off then back on
   vidTop.classList.remove('show');
   buildControls();
 }
@@ -321,19 +328,23 @@ function createPeer(rid, init) {
     if (e.track.kind === 'video') {
       remoteVid.srcObject = new MediaStream([e.track]);
       remoteVid.play().catch(() => {});
-      // switchToVideo() is triggered by remoteVid.onresize when frames actually arrive
+      // onunmute fires when partner starts sending video data (replaceTrack triggers this)
+      e.track.onunmute = () => { if (!inVideoMode) switchToVideo(); };
+      e.track.onmute   = () => { if (inVideoMode) switchToAudio(); };
     } else {
       remoteAud.srcObject = new MediaStream([e.track]);
       remoteAud.play().catch(() => {});
-      // Audio connected
-      waStatus.textContent = 'Connected · Audio call';
-      if (!_tv) startTimer();
     }
   };
 
   pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState==='connected' || pc.iceConnectionState==='completed') boostBitrate(pc);
-    if ((pc.iceConnectionState==='failed'||pc.iceConnectionState==='disconnected') && init) pc.restartIce();
+    const s = pc.iceConnectionState;
+    if (s==='connected' || s==='completed') {
+      boostBitrate(pc);
+      if (!inVideoMode) waStatus.textContent = 'Connected · Audio call';
+      if (!_tv) startTimer();
+    }
+    if ((s==='failed' || s==='disconnected') && init) pc.restartIce();
   };
   pc.onicecandidate = e => { if (e.candidate) wsSend({type:'candidate',to:rid,candidate:e.candidate}); };
 
