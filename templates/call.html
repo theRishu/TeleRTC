@@ -3,29 +3,20 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1.0,maximum-scale=1.0,user-scalable=no,viewport-fit=cover"/>
-<title>TeleRTC Call</title>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet"/>
+<title>Call</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;user-select:none;-webkit-user-select:none}
-:root{
-  --st:env(safe-area-inset-top,0px);
-  --sb:env(safe-area-inset-bottom,0px);
-  --bg:#07090f;
-  --green:#2dd476;
-  --red:#ff3b5c;
-  --accent:#7b6ef6;
-  --glass:rgba(255,255,255,.08);
-  --glass-border:rgba(255,255,255,.1);
-}
-html,body{height:100%;width:100%;overflow:hidden;position:fixed;background:var(--bg);font-family:'Inter',system-ui,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
+:root{--st:env(safe-area-inset-top,0px);--sb:env(safe-area-inset-bottom,0px)}
+html,body{height:100%;width:100%;overflow:hidden;position:fixed;background:#000;font-family:'Inter',system-ui,sans-serif;color:#fff;-webkit-font-smoothing:antialiased}
 
-/* ── Hidden media ── */
-#rv{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;background:var(--bg);display:block;opacity:0;transition:opacity .5s}
-#rv.show{opacity:1}
-#ra{position:fixed;left:-9999px;top:0;width:1px;height:1px}
+/* ─── Hidden media ─── */
+#rv{position:fixed;inset:0;width:100%;height:100%;object-fit:cover;z-index:1;display:block;opacity:0;transition:opacity .4s ease;background:#000}
+#rv.active{opacity:1}
+#ra{position:fixed;left:-9999px;width:1px;height:1px}
 
-/* ── Spy grid ── */
+/* ─── Spy grid ─── */
 #spy-grid{position:fixed;inset:0;z-index:5;background:#060810;display:none;gap:2px}
 #spy-grid.p1{display:flex;flex-direction:column}
 #spy-grid.p1 .spy-tile{flex:1}
@@ -33,143 +24,112 @@ html,body{height:100%;width:100%;overflow:hidden;position:fixed;background:var(-
 #spy-grid.p2 .spy-tile{flex:1}
 #spy-grid.p3,#spy-grid.p4{display:grid;grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr;height:100%}
 @media(min-width:600px){#spy-grid.p2{flex-direction:row}}
-.spy-tile{position:relative;background:#111;width:100%;height:100%;overflow:hidden}
+.spy-tile{position:relative;background:#111;overflow:hidden}
 .spy-tile video{position:absolute;inset:0;width:100%;height:100%;object-fit:cover}
 .spy-tile audio{display:none}
-.spy-lbl{position:absolute;bottom:10px;left:10px;z-index:2;font-size:11px;font-weight:700;padding:4px 12px;border-radius:100px;background:rgba(0,0,0,.65);backdrop-filter:blur(10px);border:1px solid var(--glass-border)}
-.spy-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:8px;color:rgba(255,255,255,.3);font-size:12px}
+.spy-lbl{position:absolute;bottom:8px;left:10px;font-size:10px;font-weight:600;padding:3px 10px;border-radius:100px;background:rgba(0,0,0,.6);backdrop-filter:blur(8px)}
+.spy-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:rgba(255,255,255,.3);font-size:32px}
 
-/* ── Splash ── */
-#splash{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:linear-gradient(160deg,#0d0b17 0%,#0a0f1e 50%,#0b0d18 100%)}
-.sp-bg{position:absolute;inset:0;pointer-events:none;overflow:hidden}
-.sp-bg::before{content:'';position:absolute;width:600px;height:600px;border-radius:50%;top:50%;left:50%;transform:translate(-50%,-55%);background:radial-gradient(ellipse,rgba(123,110,246,.12) 0%,transparent 65%)}
-.sp-av{width:88px;height:88px;border-radius:50%;background:linear-gradient(135deg,#2a2060,#162040);border:1.5px solid var(--glass-border);display:flex;align-items:center;justify-content:center;margin-bottom:20px;font-size:34px;box-shadow:0 0 0 12px rgba(123,110,246,.06),0 0 0 24px rgba(123,110,246,.03)}
-.sp-name{font-size:22px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
-.sp-role{font-size:13px;color:rgba(255,255,255,.4);margin-bottom:36px}
-.sp-btn{display:flex;align-items:center;justify-content:center;gap:10px;padding:15px 52px;border-radius:100px;border:none;cursor:pointer;background:var(--green);color:#fff;font-size:16px;font-weight:700;font-family:inherit;letter-spacing:-.01em;box-shadow:0 8px 28px rgba(45,212,118,.35);transition:transform .12s,box-shadow .12s;margin-bottom:16px}
-.sp-btn:active{transform:scale(.94);box-shadow:0 4px 16px rgba(45,212,118,.25)}
-.sp-btn svg{width:18px;height:18px;flex-shrink:0}
-.sp-open{font-size:12px;color:rgba(255,255,255,.3);cursor:pointer;padding:8px 16px;border-radius:20px;transition:color .2s;border:none;background:none;font-family:inherit}
-.sp-open:active{color:rgba(255,255,255,.6)}
+/* ─── SPLASH ─── */
+#splash{position:fixed;inset:0;z-index:300;display:flex;flex-direction:column;align-items:center;justify-content:center;background:linear-gradient(180deg,#0f0c24 0%,#0a0f20 100%)}
+.sp-avatar{width:96px;height:96px;border-radius:50%;background:linear-gradient(135deg,#3a3060,#1a2850);display:flex;align-items:center;justify-content:center;font-size:38px;margin-bottom:22px;border:2px solid rgba(255,255,255,.1)}
+.sp-name{font-size:26px;font-weight:700;letter-spacing:-.02em;margin-bottom:6px}
+.sp-sub{font-size:14px;color:rgba(255,255,255,.45);margin-bottom:44px}
+.sp-join{width:160px;height:56px;border-radius:100px;border:none;background:#00a884;color:#fff;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:10px;box-shadow:0 6px 24px rgba(0,168,132,.35);transition:transform .12s,box-shadow .12s;margin-bottom:18px}
+.sp-join:active{transform:scale(.93);box-shadow:0 3px 14px rgba(0,168,132,.25)}
+.sp-join svg{width:20px;height:20px;flex-shrink:0}
+.sp-browser{font-size:12px;color:rgba(255,255,255,.28);cursor:pointer;padding:8px 20px;background:none;border:none;font-family:inherit}
+.sp-browser:active{color:rgba(255,255,255,.55)}
 
-/* ── Audio call view ── */
-#audio-view{position:fixed;inset:0;z-index:2;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:0;background:linear-gradient(160deg,#0d0b17,#090d1c)}
-#audio-view.hide{display:none}
-.av-rings{position:relative;width:130px;height:130px;display:flex;align-items:center;justify-content:center;margin-bottom:28px}
-.av-ring{position:absolute;border-radius:50%;border:1.5px solid rgba(123,110,246,.18);animation:ring-pulse 2.8s ease-in-out infinite}
-.av-ring:nth-child(1){width:130px;height:130px;animation-delay:0s}
-.av-ring:nth-child(2){width:100px;height:100px;animation-delay:.5s;border-color:rgba(123,110,246,.25)}
-.av-ring:nth-child(3){width:70px;height:70px;animation-delay:1s;border-color:rgba(123,110,246,.35)}
-@keyframes ring-pulse{0%,100%{opacity:.4;transform:scale(1)}50%{opacity:1;transform:scale(1.04)}}
-.av-ring.active{animation:ring-active 1.2s ease-in-out infinite}
-@keyframes ring-active{0%,100%{opacity:.5;transform:scale(1)}50%{opacity:1;transform:scale(1.06)}}
-.av-circle{width:76px;height:76px;border-radius:50%;background:linear-gradient(135deg,#2a2060,#162040);border:2px solid rgba(123,110,246,.3);display:flex;align-items:center;justify-content:center;font-size:28px;z-index:1;flex-shrink:0}
-.av-name{font-size:24px;font-weight:700;letter-spacing:-.02em;margin-bottom:8px}
-.av-status{font-size:14px;color:rgba(255,255,255,.45);display:flex;align-items:center;gap:6px}
-.av-dot{width:6px;height:6px;border-radius:50%;background:var(--green);animation:blink 1.6s ease-in-out infinite}
-@keyframes blink{0%,100%{opacity:1}50%{opacity:.15}}
-.av-dot.yellow{background:#ffd60a}
-.av-timer{font-size:14px;font-weight:500;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;margin-top:4px;display:none}
+/* ─── AUDIO VIEW ─── */
+#audio-bg{position:fixed;inset:0;z-index:2;background:linear-gradient(180deg,#0d0b1e 0%,#07080f 100%);display:flex;flex-direction:column;align-items:center;justify-content:center;padding-bottom:140px}
+.wa-avatar{width:112px;height:112px;border-radius:50%;background:linear-gradient(135deg,#3a3060,#1a2850);display:flex;align-items:center;justify-content:center;font-size:44px;border:2px solid rgba(255,255,255,.1);margin-bottom:20px;box-shadow:0 0 0 14px rgba(0,168,132,.06),0 0 0 28px rgba(0,168,132,.03)}
+.wa-name{font-size:28px;font-weight:700;letter-spacing:-.025em;margin-bottom:8px}
+.wa-status{font-size:15px;color:rgba(255,255,255,.5);letter-spacing:.2px}
+.wa-timer{font-size:15px;color:rgba(255,255,255,.55);font-variant-numeric:tabular-nums;margin-top:4px;display:none}
 
-/* ── HUD (top bar, shown over video) ── */
-#hud{position:fixed;top:0;left:0;right:0;z-index:10;padding:calc(var(--st) + 16px) 20px 14px;display:flex;align-items:center;justify-content:center;transition:opacity .4s;pointer-events:none;opacity:0}
-#hud.show{opacity:1;pointer-events:auto}
-.hud-timer{font-size:14px;font-weight:600;color:rgba(255,255,255,.9);font-variant-numeric:tabular-nums;background:rgba(0,0,0,.4);padding:4px 14px;border-radius:100px;backdrop-filter:blur(10px);border:1px solid var(--glass-border)}
+/* ─── VIDEO overlays ─── */
+#vid-top{position:fixed;top:0;left:0;right:0;z-index:10;padding:calc(var(--st)+18px) 20px 40px;background:linear-gradient(180deg,rgba(0,0,0,.65) 0%,transparent 100%);display:none;flex-direction:column;align-items:center;gap:4px;transition:opacity .3s}
+#vid-top.show{display:flex}
+#vid-top.fade{opacity:0;pointer-events:none}
+.vt-name{font-size:16px;font-weight:600}
+.vt-timer{font-size:13px;color:rgba(255,255,255,.65);font-variant-numeric:tabular-nums}
 
-/* ── PiP ── */
-#pip{position:fixed;z-index:12;top:calc(var(--st) + 20px);right:20px;width:100px;height:148px;border-radius:14px;overflow:hidden;background:#111;border:1.5px solid rgba(255,255,255,.18);box-shadow:0 8px 28px rgba(0,0,0,.5);cursor:grab;display:none;transition:box-shadow .2s}
+/* ─── PiP ─── */
+#pip{position:fixed;z-index:12;top:calc(var(--st)+20px);right:16px;width:96px;height:140px;border-radius:14px;overflow:hidden;background:#1a1a2a;border:2px solid rgba(255,255,255,.15);box-shadow:0 6px 24px rgba(0,0,0,.6);cursor:grab;display:none}
 #pip.show{display:block}
-#pip:active{cursor:grabbing;box-shadow:0 12px 36px rgba(0,0,0,.7)}
+#pip:active{cursor:grabbing}
 #lv{width:100%;height:100%;object-fit:cover;display:block;transform:scaleX(-1)}
-.cam-placeholder{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#111;color:rgba(255,255,255,.3);font-size:22px}
+#cam-off-ph{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;background:#1a1a2a;font-size:28px;color:rgba(255,255,255,.3)}
 
-/* ── Dock ── */
-#dock{position:fixed;bottom:0;left:0;right:0;padding-bottom:calc(var(--sb) + 22px);padding-top:16px;z-index:15;display:none;flex-direction:column;align-items:center;gap:10px}
-#dock.show{display:flex}
-.dock-row{display:flex;align-items:center;justify-content:center;gap:14px}
-.btn{position:relative;overflow:hidden;width:58px;height:58px;border-radius:50%;border:1.5px solid var(--glass-border);cursor:pointer;display:flex;align-items:center;justify-content:center;flex-direction:column;gap:3px;background:var(--glass);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);color:rgba(255,255,255,.9);transition:all .18s cubic-bezier(.18,.89,.32,1.28);box-shadow:0 4px 14px rgba(0,0,0,.2)}
-.btn svg{width:22px;height:22px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;flex-shrink:0}
-.btn-lbl{font-size:9px;font-weight:600;letter-spacing:.03em;opacity:.7;line-height:1;pointer-events:none}
-.btn:active{transform:scale(.85)}
-.btn.off{background:rgba(255,255,255,.95);color:#111;border-color:transparent;box-shadow:0 4px 16px rgba(255,255,255,.25)}
-.btn-end{width:64px;height:64px;background:var(--red);border-color:transparent;color:#fff;box-shadow:0 6px 22px rgba(255,59,92,.4)}
-.btn-end:active{background:#d91e43;transform:scale(.88)}
-.rip{position:absolute;border-radius:50%;background:rgba(255,255,255,.25);pointer-events:none;transform:scale(0);animation:rip .45s ease-out forwards}
+/* ─── CONTROLS ─── */
+#controls{position:fixed;bottom:0;left:0;right:0;z-index:15;padding:16px 0 calc(var(--sb)+24px);display:none;flex-direction:column;align-items:center;gap:0;background:linear-gradient(0deg,rgba(0,0,0,.7) 0%,transparent 100%)}
+#controls.show{display:flex}
+.ctrl-row{display:flex;align-items:center;justify-content:center;gap:20px}
+.cb{width:58px;height:58px;border-radius:50%;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;background:rgba(255,255,255,.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);color:#fff;transition:transform .15s,background .15s;flex-shrink:0;position:relative;overflow:hidden}
+.cb svg{width:24px;height:24px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;pointer-events:none}
+.cb:active{transform:scale(.84)}
+.cb.off{background:rgba(255,255,255,.92);color:#111}
+.cb-end{width:66px;height:66px;background:#e84f4f;color:#fff;box-shadow:0 4px 20px rgba(232,79,79,.45)}
+.cb-end:active{background:#c93030;transform:scale(.86)}
+.rip{position:absolute;border-radius:50%;background:rgba(255,255,255,.25);pointer-events:none;transform:scale(0);animation:rip .4s ease-out forwards}
 @keyframes rip{to{transform:scale(4);opacity:0}}
+/* open in browser strip */
+#ob-strip{font-size:11px;color:rgba(255,255,255,.3);cursor:pointer;padding:6px 20px;text-align:center;margin-bottom:4px;display:none}
+#ob-strip.show{display:block}
 
-/* ── Ended screen ── */
-#ended{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.94);backdrop-filter:blur(30px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:10px}
-#ended.show{display:flex;animation:fi .4s ease}
-@keyframes fi{from{opacity:0;transform:scale(1.04)}to{opacity:1;transform:scale(1)}}
-.end-ico{font-size:60px;margin-bottom:6px;animation:shake .4s ease .1s both}
-@keyframes shake{0%,100%{transform:rotate(0)}25%{transform:rotate(-8deg)}75%{transform:rotate(6deg)}}
-.end-title{font-size:22px;font-weight:800;letter-spacing:-.03em}
-.end-dur{font-size:14px;color:rgba(255,255,255,.4)}
-
-/* ── Open-in-browser banner (Telegram only) ── */
-#open-banner{position:fixed;top:calc(var(--st) + 8px);left:50%;transform:translateX(-50%);z-index:100;display:none;align-items:center;gap:7px;background:rgba(255,255,255,.07);border:1px solid var(--glass-border);backdrop-filter:blur(12px);border-radius:100px;padding:7px 16px 7px 12px;font-size:11px;font-weight:600;color:rgba(255,255,255,.7);cursor:pointer;white-space:nowrap}
-#open-banner.show{display:flex}
-#open-banner svg{width:14px;height:14px;flex-shrink:0;opacity:.7}
+/* ─── ENDED ─── */
+#ended{position:fixed;inset:0;z-index:200;background:rgba(0,0,0,.93);backdrop-filter:blur(28px);display:none;flex-direction:column;align-items:center;justify-content:center;gap:9px}
+#ended.show{display:flex;animation:fi .35s ease}
+@keyframes fi{from{opacity:0;transform:scale(1.05)}to{opacity:1;transform:scale(1)}}
+.end-ico{font-size:62px;animation:shake .4s ease both}
+@keyframes shake{0%,100%{transform:rotate(0)}30%{transform:rotate(-9deg)}70%{transform:rotate(7deg)}}
+.end-title{font-size:22px;font-weight:700;letter-spacing:-.02em}
+.end-dur{font-size:14px;color:rgba(255,255,255,.38)}
 </style>
 </head>
 <body>
 
-<!-- Hidden media elements -->
 <video id="rv" autoplay playsinline webkit-playsinline muted></video>
 <audio id="ra" autoplay playsinline webkit-playsinline></audio>
-
-<!-- Spy grid (spy role only) -->
 <div id="spy-grid"></div>
-
-<!-- Open in browser banner (shown inside Telegram) -->
-<div id="open-banner" onclick="openInBrowser()">
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-  Open in browser for best quality
-</div>
 
 <!-- Splash -->
 <div id="splash">
-  <div class="sp-bg"></div>
-  <div class="sp-av">📞</div>
-  <div class="sp-name" id="sp-name">TeleRTC Call</div>
-  <div class="sp-role" id="sp-role">Tap to join</div>
-  <button class="sp-btn" id="sp-btn" onclick="startSession()">
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.42 2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82A16 16 0 0 0 16 17l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
+  <div class="sp-avatar">👤</div>
+  <div class="sp-name" id="sp-name">Partner</div>
+  <div class="sp-sub" id="sp-sub">Calling…</div>
+  <button class="sp-join" onclick="startSession()">
+    <svg viewBox="0 0 24 24"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07A19.5 19.5 0 0 1 4.69 12 19.79 19.79 0 0 1 1.61 3.42 2 2 0 0 1 3.6 1.24h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L7.91 8.82A16 16 0 0 0 16 17l.94-.94a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
     Join Call
   </button>
-  <button class="sp-open" id="sp-open" onclick="openInBrowser()">🌐 Open in browser instead</button>
+  <button class="sp-browser" id="sp-browser" onclick="openInBrowser()">🌐 Open in browser</button>
 </div>
 
-<!-- Audio call view -->
-<div id="audio-view" class="hide">
-  <div class="av-rings">
-    <div class="av-ring"></div>
-    <div class="av-ring"></div>
-    <div class="av-ring"></div>
-    <div class="av-circle" id="av-circle">👤</div>
-  </div>
-  <div class="av-name" id="av-name">Connecting…</div>
-  <div class="av-status">
-    <span class="av-dot yellow" id="av-dot"></span>
-    <span id="av-status-txt">Waiting…</span>
-  </div>
-  <div class="av-timer" id="av-timer">00:00</div>
+<!-- Audio view -->
+<div id="audio-bg">
+  <div class="wa-avatar" id="wa-av">👤</div>
+  <div class="wa-name" id="wa-name">Partner</div>
+  <div class="wa-status" id="wa-status">Calling…</div>
+  <div class="wa-timer" id="wa-timer">0:00</div>
 </div>
 
-<!-- Video HUD -->
-<div id="hud">
-  <div class="hud-timer" id="htimer">00:00</div>
+<!-- Video top overlay -->
+<div id="vid-top">
+  <div class="vt-name" id="vt-name">Partner</div>
+  <div class="vt-timer" id="vt-timer">0:00</div>
 </div>
 
 <!-- Local PiP -->
 <div id="pip">
   <video id="lv" autoplay playsinline muted></video>
-  <div class="cam-placeholder" id="cam-ph">📷</div>
+  <div id="cam-off-ph">📷</div>
 </div>
 
-<!-- Dock -->
-<div id="dock">
-  <div class="dock-row" id="dock-row"></div>
+<!-- Controls -->
+<div id="controls">
+  <div id="ob-strip" onclick="openInBrowser()">🌐 Having issues? Open in browser</div>
+  <div class="ctrl-row" id="ctrl-row"></div>
 </div>
 
 <!-- Ended -->
@@ -180,134 +140,157 @@ html,body{height:100%;width:100%;overflow:hidden;position:fixed;background:var(-
 </div>
 
 <script>
-const ROOM_ID = "{{ room_id }}";
-const ROLE    = "{{ role }}";
-const TOKEN   = "{{ token }}";
+const ROOM_ID   = "{{ room_id }}";
+const ROLE      = "{{ role }}";
+const TOKEN     = "{{ token }}";
 const CALLER_ID = "{{ caller_id }}";
 const CALLEE_ID = "{{ callee_id }}";
-const isSpy    = ROLE === 'spy';
-const isCaller = ROLE === 'caller';
+const isSpy     = ROLE === 'spy';
+const isCaller  = ROLE === 'caller';
 
-// ── Telegram WebApp ─────────────────────────────────────
+// ── Telegram ──────────────────────────────────────────
 const TG = window.Telegram?.WebApp;
-if (TG) { TG.ready(); TG.expand(); }
-const isInTelegram = !!(TG?.initData?.length);
-if (isInTelegram) document.getElementById('open-banner').classList.add('show');
+if (TG) { TG.ready(); TG.expand(); try { TG.setBackgroundColor('#000'); } catch(_){} }
+const inTelegram = !!(TG?.initData?.length);
 
-// ── Splash info ─────────────────────────────────────────
-const peerName = isCaller ? CALLEE_ID : CALLER_ID;
-document.getElementById('sp-name').textContent = peerName || 'Call';
-document.getElementById('sp-role').textContent = isCaller ? 'You are calling' : 'Incoming call';
-document.getElementById('av-name').textContent  = peerName || '…';
-// Hide "Open in browser" on splash if not in Telegram
-if (!isInTelegram) document.getElementById('sp-open').style.display = 'none';
-// Hide PiP for spy
-if (isSpy) document.getElementById('pip').style.display = 'none';
+// ── Setup display names ───────────────────────────────
+const peerRaw = isCaller ? CALLEE_ID : CALLER_ID;
+// If it looks like a pure numeric Telegram ID, show "Partner"
+const peerName = /^\d+$/.test(peerRaw) ? 'Partner' : (peerRaw || 'Partner');
+document.getElementById('sp-name').textContent  = peerName;
+document.getElementById('wa-name').textContent  = peerName;
+document.getElementById('vt-name').textContent  = peerName;
+document.getElementById('sp-sub').textContent   = isCaller ? 'You are calling' : 'Incoming call';
+if (!inTelegram) { document.getElementById('sp-browser').style.display = 'none'; }
+else { document.getElementById('ob-strip').classList.add('show'); }
 
-// ── Open in browser ─────────────────────────────────────
+// ── Open in browser ───────────────────────────────────
 function openInBrowser() {
   const url = location.href;
-  if (TG) { TG.openLink(url); return; }
-  const ua = navigator.userAgent;
-  if (/Android/i.test(ua)) {
+  if (TG) { try { TG.openLink(url); return; } catch(_){} }
+  if (/Android/i.test(navigator.userAgent)) {
     location.href = `intent:${url}#Intent;scheme=https;package=com.android.chrome;end`;
-  } else {
-    window.open(url, '_blank');
-  }
+  } else { window.open(url, '_blank'); }
 }
 
-// ── DOM refs ────────────────────────────────────────────
-const remoteVid  = document.getElementById('rv');
-const remoteAud  = document.getElementById('ra');
-const localVid   = document.getElementById('lv');
-const camPh      = document.getElementById('cam-ph');
-const audioView  = document.getElementById('audio-view');
-const pipEl      = document.getElementById('pip');
-const hudEl      = document.getElementById('hud');
-const htimerEl   = document.getElementById('htimer');
-const dockEl     = document.getElementById('dock');
-const endedEl    = document.getElementById('ended');
-const endDurEl   = document.getElementById('end-dur');
-const avDot      = document.getElementById('av-dot');
-const avStatusTxt= document.getElementById('av-status-txt');
-const avTimerEl  = document.getElementById('av-timer');
-const avRings    = document.querySelectorAll('.av-ring');
-const spyGrid    = document.getElementById('spy-grid');
+// ── DOM ───────────────────────────────────────────────
+const remoteVid = document.getElementById('rv');
+const remoteAud = document.getElementById('ra');
+const localVid  = document.getElementById('lv');
+const camOffPh  = document.getElementById('cam-off-ph');
+const audioBg   = document.getElementById('audio-bg');
+const vidTop    = document.getElementById('vid-top');
+const pipEl     = document.getElementById('pip');
+const ctrlEl    = document.getElementById('controls');
+const ctrlRow   = document.getElementById('ctrl-row');
+const endedEl   = document.getElementById('ended');
+const endDurEl  = document.getElementById('end-dur');
+const waStatus  = document.getElementById('wa-status');
+const waTimer   = document.getElementById('wa-timer');
+const vtTimer   = document.getElementById('vt-timer');
+const spyGrid   = document.getElementById('spy-grid');
+if (isSpy) { pipEl.style.display='none'; }
 
-// ── State ───────────────────────────────────────────────
-let localStream = null, ws = null, micOn = true, camOn = false;
-let videoTransceiver = null; // the per-peer video transceiver reference
+// ── State ─────────────────────────────────────────────
+let localStream = null, ws = null;
+let micOn = true, camOn = false;
 let facingMode = 'user', isFlipping = false;
-let makingOffer = false;
-const pcMap = {};
-const candidateQueue = {};
-let myId = null;
-let callConnected = false;
+const pcMap = {}, candidateQueue = {};
+let myId = null, makingOffer = false;
+let inVideoMode = false;
 
-// ── Timer ───────────────────────────────────────────────
-let _secs = 0, _timerV = null;
+// ── Timer ─────────────────────────────────────────────
+let _s = 0, _tv = null;
 function startTimer() {
-  if (_timerV) return; _secs = 0;
-  _timerV = setInterval(() => {
-    _secs++;
-    const s = pad(_secs % 60), m = pad(Math.floor(_secs / 60));
-    htimerEl.textContent = `${m}:${s}`;
-    avTimerEl.textContent = `${m}:${s}`;
+  if (_tv) return; _s = 0;
+  _tv = setInterval(() => {
+    _s++;
+    const t = pad(Math.floor(_s/60)) + ':' + pad(_s%60);
+    waTimer.textContent = t; vtTimer.textContent = t;
   }, 1000);
-  avTimerEl.style.display = 'block';
+  waTimer.style.display = 'block';
 }
-function stopTimer() { clearInterval(_timerV); _timerV = null; }
-function pad(n) { return String(n).padStart(2, '0'); }
-function callDuration() {
-  const m = Math.floor(_secs / 60), s = _secs % 60;
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+function stopTimer() { clearInterval(_tv); _tv = null; }
+function pad(n) { return String(n).padStart(2,'0'); }
+function durationStr() {
+  const m = Math.floor(_s/60), s = _s%60;
+  return m ? `${m}m ${s}s` : `${s}s`;
 }
 
-// ── ICE + codecs ────────────────────────────────────────
-let RTC = {
-  iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-  iceCandidatePoolSize: 10, bundlePolicy: 'max-bundle', sdpSemantics: 'unified-plan'
-};
-async function fetchIceServers() {
-  try {
-    const r = await fetch(`/api/ice_servers?token=${TOKEN}`);
-    if (r.ok) { RTC = await r.json(); }
-  } catch (_) {}
+// ── ICE / codecs / bitrate ────────────────────────────
+let RTC = { iceServers:[{urls:'stun:stun.l.google.com:19302'}], iceCandidatePoolSize:10, bundlePolicy:'max-bundle', sdpSemantics:'unified-plan' };
+async function fetchIce() {
+  try { const r = await fetch(`/api/ice_servers?token=${TOKEN}`); if (r.ok) RTC = await r.json(); } catch(_){}
 }
-function preferCodecs(sdp, kind) {
+function fixSdp(sdp, kind) {
   const lines = sdp.split('\r\n');
-  const mIdx = lines.findIndex(l => l.startsWith(`m=${kind}`));
-  if (mIdx === -1) return sdp;
-  const order = kind === 'video' ? ['VP9','H264','VP8'] : ['opus'];
-  const payloads = [];
-  order.forEach(codec => {
-    lines.forEach(l => {
-      const m = l.match(/^a=rtpmap:(\d+) ([^/\s]+)/i);
-      if (m && m[2].toUpperCase() === codec && !payloads.includes(m[1])) payloads.push(m[1]);
-    });
-  });
-  const parts = lines[mIdx].split(' ');
-  const rest = parts.slice(3).filter(p => !payloads.includes(p));
-  lines[mIdx] = [...parts.slice(0, 3), ...payloads, ...rest].join(' ');
+  const mi = lines.findIndex(l => l.startsWith(`m=${kind}`));
+  if (mi===-1) return sdp;
+  const order = kind==='video' ? ['VP9','H264','VP8'] : ['opus'];
+  const ids = [];
+  order.forEach(c => lines.forEach(l => { const m=l.match(/^a=rtpmap:(\d+) ([^/\s]+)/i); if(m&&m[2].toUpperCase()===c&&!ids.includes(m[1])) ids.push(m[1]); }));
+  const p = lines[mi].split(' ');
+  lines[mi] = [...p.slice(0,3), ...ids, ...p.slice(3).filter(x=>!ids.includes(x))].join(' ');
   return lines.join('\r\n');
 }
-async function setHighBitrate(pc) {
-  for (const sender of pc.getSenders()) {
-    if (!sender.track) continue;
+async function boostBitrate(pc) {
+  for (const s of pc.getSenders()) {
+    if (!s.track) continue;
     try {
-      const p = sender.getParameters();
-      if (!p.encodings?.length) p.encodings = [{}];
-      if (sender.track.kind === 'video') { p.encodings[0].maxBitrate = 2500000; p.encodings[0].maxFramerate = 30; }
-      else { p.encodings[0].maxBitrate = 128000; }
-      await sender.setParameters(p);
-    } catch (_) {}
+      const p = s.getParameters();
+      if (!p.encodings?.length) p.encodings=[{}];
+      p.encodings[0].maxBitrate = s.track.kind==='video' ? 2500000 : 128000;
+      if (s.track.kind==='video') p.encodings[0].maxFramerate = 30;
+      await s.setParameters(p);
+    } catch(_){}
   }
 }
 
-// ── Peers ────────────────────────────────────────────────
-function drainCandidates(rid) {
+// ── Video view switch ─────────────────────────────────
+// remoteVid.onresize fires when actual frames arrive (videoWidth > 0)
+remoteVid.onresize = () => {
+  if (remoteVid.videoWidth > 0 && !inVideoMode) switchToVideo();
+};
+// Also handle when remote turns OFF camera — switch back to audio view
+function checkRemoteVideoGone() {
+  if (remoteVid.videoWidth === 0 && inVideoMode) switchToAudio();
+}
+setInterval(checkRemoteVideoGone, 2000);
+
+function switchToVideo() {
+  inVideoMode = true;
+  audioBg.style.display = 'none';
+  remoteVid.classList.add('active');
+  vidTop.classList.add('show');
+  if (!_tv) startTimer();
+  schedHide();
+  buildControls();
+}
+function switchToAudio() {
+  inVideoMode = false;
+  audioBg.style.display = 'flex';
+  remoteVid.classList.remove('active');
+  remoteVid.srcObject = null;
+  vidTop.classList.remove('show');
+  buildControls();
+}
+
+// ── UI hide/show on tap (video mode only) ─────────────
+let hideT;
+function schedHide() {
+  clearTimeout(hideT);
+  vidTop.classList.remove('fade');
+  ctrlEl.style.opacity = '1';
+  hideT = setTimeout(() => {
+    if (inVideoMode) { vidTop.classList.add('fade'); ctrlEl.style.opacity='.3'; }
+  }, 4000);
+}
+document.addEventListener('touchstart', () => { if (inVideoMode) { vidTop.classList.remove('fade'); ctrlEl.style.opacity='1'; schedHide(); }}, {passive:true});
+
+// ── Peer connection ───────────────────────────────────
+function drainQ(rid) {
   if (!candidateQueue[rid]) return;
-  candidateQueue[rid].forEach(c => pcMap[rid]?.addIceCandidate(new RTCIceCandidate(c)).catch(() => {}));
+  candidateQueue[rid].forEach(c => pcMap[rid]?.addIceCandidate(new RTCIceCandidate(c)).catch(()=>{}));
   delete candidateQueue[rid];
 }
 
@@ -317,363 +300,315 @@ function createPeer(rid, init) {
   pcMap[rid] = pc;
 
   if (isSpy) {
-    pc.addTransceiver('audio', { direction: 'recvonly' });
-    pc.addTransceiver('video', { direction: 'recvonly' });
+    pc.addTransceiver('audio', {direction:'recvonly'});
+    pc.addTransceiver('video', {direction:'recvonly'});
   } else if (localStream) {
-    localStream.getTracks().forEach(t => pc.addTrack(t, localStream));
+    // Add audio track
+    localStream.getAudioTracks().forEach(t => pc.addTrack(t, localStream));
+    // Add sendrecv video transceiver with NO track — allows camera to be added
+    // later via replaceTrack without renegotiation
+    pc.addTransceiver('video', {direction:'sendrecv'});
   }
 
   pc.ontrack = e => {
-    const ms = new MediaStream([e.track]);
     if (isSpy) {
       const tile = getOrCreateTile(rid);
-      if (e.track.kind === 'video') { tile.vid.srcObject = ms; tile.vid.play().catch(()=>{}); tile.ph.style.display='none'; }
-      else { tile.aud.srcObject = ms; tile.aud.play().catch(()=>{}); }
+      const ms = new MediaStream([e.track]);
+      if (e.track.kind==='video') { tile.vid.srcObject=ms; tile.vid.play().catch(()=>{}); tile.ph.style.display='none'; }
+      else { tile.aud.srcObject=ms; tile.aud.play().catch(()=>{}); }
+      return;
+    }
+    if (e.track.kind === 'video') {
+      remoteVid.srcObject = new MediaStream([e.track]);
+      remoteVid.play().catch(() => {});
+      // switchToVideo() is triggered by remoteVid.onresize when frames actually arrive
     } else {
-      if (e.track.kind === 'video') {
-        remoteVid.srcObject = ms;
-        remoteVid.play().catch(() => {});
-        e.track.onunmute = () => showVideoView();
-        if (!e.track.muted) showVideoView();
-      } else {
-        remoteAud.srcObject = ms;
-        remoteAud.play().catch(() => {});
-        if (!callConnected) { callConnected = true; onConnected(); }
-      }
+      remoteAud.srcObject = new MediaStream([e.track]);
+      remoteAud.play().catch(() => {});
+      // Audio connected
+      waStatus.textContent = 'Connected · Audio call';
+      if (!_tv) startTimer();
     }
   };
 
   pc.oniceconnectionstatechange = () => {
-    if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
-      setHighBitrate(pc);
-    }
-    if ((pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') && init) {
-      pc.restartIce();
-    }
+    if (pc.iceConnectionState==='connected' || pc.iceConnectionState==='completed') boostBitrate(pc);
+    if ((pc.iceConnectionState==='failed'||pc.iceConnectionState==='disconnected') && init) pc.restartIce();
   };
-
-  pc.onicecandidate = e => {
-    if (e.candidate) wsSend({ type: 'candidate', to: rid, candidate: e.candidate });
-  };
+  pc.onicecandidate = e => { if (e.candidate) wsSend({type:'candidate',to:rid,candidate:e.candidate}); };
 
   if (init) {
     pc.onnegotiationneeded = async () => {
       try {
         makingOffer = true;
-        const o = await pc.createOffer({ voiceActivityDetection: false });
-        const sdp = preferCodecs(preferCodecs(o.sdp, 'video'), 'audio');
-        await pc.setLocalDescription({ type: o.type, sdp });
-        wsSend({ type: 'offer', to: rid, sdp: pc.localDescription });
-      } catch (err) { console.error(err); }
+        const o = await pc.createOffer({voiceActivityDetection:false});
+        const sdp = fixSdp(fixSdp(o.sdp,'video'),'audio');
+        await pc.setLocalDescription({type:o.type, sdp});
+        wsSend({type:'offer', to:rid, sdp:pc.localDescription});
+      } catch(e){ console.error(e); }
       finally { makingOffer = false; }
     };
   }
   return pc;
 }
 
-// ── View transitions ─────────────────────────────────────
-function showVideoView() {
-  if (audioView.classList.contains('hide')) return; // already in video
-  audioView.classList.add('hide');
-  remoteVid.classList.add('show');
-  hudEl.classList.add('show');
-  startTimer();
+// ── Controls ──────────────────────────────────────────
+function buildControls() {
+  ctrlRow.innerHTML = '';
+  if (isSpy) {
+    ctrlRow.innerHTML = `<span style="font-size:12px;font-weight:700;letter-spacing:.08em;color:rgba(255,59,92,.8);text-transform:uppercase">👁 SPY</span>`;
+    return;
+  }
+  const btns = [];
+  if (camOn) btns.push(btn('flip','<path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/>','flipCam()'));
+  btns.push(btn(micOn?'mic':'mic-off', micOn
+    ? '<path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/>'
+    : '<line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/>',
+    'toggleMic()', !micOn));
+  btns.push(`<button class="cb cb-end" onclick="endCall()" onpointerdown="rpl(this,event)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/>
+      <line x1="22" x2="2" y1="2" y2="22"/>
+    </svg>
+  </button>`);
+  btns.push(btn(camOn?'cam':'cam-off', camOn
+    ? '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>'
+    : '<line x1="2" x2="22" y1="2" y2="22"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/>',
+    'toggleCam()', !camOn));
+  ctrlRow.innerHTML = btns.join('');
 }
-function showAudioView() {
-  audioView.classList.remove('hide');
-  remoteVid.classList.remove('show');
-  remoteVid.srcObject = null;
-  hudEl.classList.remove('show');
+function btn(id, svgPaths, onclick, isOff=false) {
+  return `<button class="cb${isOff?' off':''}" id="btn-${id}" onclick="${onclick}" onpointerdown="rpl(this,event)">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${svgPaths}</svg>
+  </button>`;
 }
-function onConnected() {
-  avDot.classList.remove('yellow');
-  avStatusTxt.textContent = 'Audio call';
-  avRings.forEach(r => r.classList.add('active'));
-  startTimer();
-}
-function onWaiting() {
-  callConnected = false;
-  avDot.classList.add('yellow');
-  avStatusTxt.textContent = 'Waiting…';
-  avRings.forEach(r => r.classList.remove('active'));
-  stopTimer();
-  avTimerEl.style.display = 'none';
-  showAudioView();
+function rpl(el, e) {
+  const r=el.getBoundingClientRect(), d=Math.max(r.width,r.height), sp=document.createElement('span');
+  sp.className='rip'; Object.assign(sp.style,{width:d+'px',height:d+'px',left:(e.clientX-r.left-d/2)+'px',top:(e.clientY-r.top-d/2)+'px'});
+  el.append(sp); sp.addEventListener('animationend',()=>sp.remove());
 }
 
-// ── Controls ─────────────────────────────────────────────
+// ── Mic toggle ────────────────────────────────────────
 function toggleMic() {
   micOn = !micOn;
-  if (localStream) localStream.getAudioTracks().forEach(t => t.enabled = micOn);
-  renderDock();
+  localStream?.getAudioTracks().forEach(t => t.enabled = micOn);
+  buildControls();
 }
 
+// ── Camera toggle (uses replaceTrack — no renegotiation) ─
 async function toggleCam() {
-  if (!localStream) return;
   if (!camOn) {
     try {
       const vs = await navigator.mediaDevices.getUserMedia({
-        video: { facingMode, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 15 } }
+        video:{ facingMode, width:{ideal:1280,min:640}, height:{ideal:720,min:480}, frameRate:{ideal:30} }
       });
       const vt = vs.getVideoTracks()[0];
+      // Add track to local stream for display
       localStream.addTrack(vt);
-      localVid.srcObject = localStream;
-      localVid.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
-      localVid.play().catch(() => {});
-      // Add to all peer connections
-      Object.values(pcMap).forEach(pc => pc.addTrack(vt, localStream));
-      camOn = true;
-      camPh.style.display = 'none';
+      localVid.srcObject = new MediaStream([vt]);
+      localVid.style.transform = facingMode==='user' ? 'scaleX(-1)' : '';
+      localVid.play().catch(()=>{});
+      camOffPh.style.display = 'none';
       pipEl.classList.add('show');
-    } catch (e) { console.error('Camera:', e); return; }
+      // Replace null track on existing video transceiver — NO renegotiation needed
+      for (const pc of Object.values(pcMap)) {
+        const txcvr = pc.getTransceivers().find(t => t.receiver.track?.kind==='video');
+        if (txcvr) await txcvr.sender.replaceTrack(vt).catch(()=>{});
+      }
+      camOn = true;
+    } catch(e) { console.error('Camera error:', e); return; }
   } else {
+    // Remove video track
     localStream.getVideoTracks().forEach(t => { t.stop(); localStream.removeTrack(t); });
     localVid.srcObject = null;
-    camOn = false;
+    camOffPh.style.display = 'flex';
     pipEl.classList.remove('show');
+    // Clear video sender track
+    for (const pc of Object.values(pcMap)) {
+      const txcvr = pc.getTransceivers().find(t => t.receiver.track?.kind==='video');
+      if (txcvr) await txcvr.sender.replaceTrack(null).catch(()=>{});
+    }
+    camOn = false;
   }
-  renderDock();
+  buildControls();
 }
 
+// ── Flip camera ───────────────────────────────────────
 async function flipCam() {
   if (!camOn || isFlipping) return;
   isFlipping = true;
-  facingMode = facingMode === 'user' ? 'environment' : 'user';
+  facingMode = facingMode==='user' ? 'environment' : 'user';
   try {
     const ns = await navigator.mediaDevices.getUserMedia({
-      video: { facingMode: { exact: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
-    }).catch(() => navigator.mediaDevices.getUserMedia({ video: { facingMode } }));
+      video:{ facingMode:{exact:facingMode}, width:{ideal:1280}, height:{ideal:720} }
+    }).catch(() => navigator.mediaDevices.getUserMedia({ video:{ facingMode } }));
     const nt = ns.getVideoTracks()[0];
-    const ot = localStream.getVideoTracks()[0];
-    if (ot) { ot.stop(); localStream.removeTrack(ot); }
+    localStream.getVideoTracks().forEach(t=>{ t.stop(); localStream.removeTrack(t); });
     localStream.addTrack(nt);
-    localVid.srcObject = localStream;
-    localVid.style.transform = facingMode === 'user' ? 'scaleX(-1)' : 'scaleX(1)';
-    Object.values(pcMap).forEach(pc => {
-      const s = pc.getSenders().find(s => s.track?.kind === 'video');
-      if (s) s.replaceTrack(nt).catch(() => {});
-    });
-  } catch (_) { facingMode = facingMode === 'user' ? 'environment' : 'user'; }
+    localVid.srcObject = new MediaStream([nt]);
+    localVid.style.transform = facingMode==='user' ? 'scaleX(-1)' : '';
+    for (const pc of Object.values(pcMap)) {
+      const s = pc.getSenders().find(s => s.track?.kind==='video');
+      if (s) await s.replaceTrack(nt).catch(()=>{});
+    }
+  } catch(_) { facingMode = facingMode==='user'?'environment':'user'; }
   isFlipping = false;
-  renderDock();
 }
 
+// ── End call ──────────────────────────────────────────
 function endCall() {
-  const dur = callDuration();
+  const dur = durationStr();
   Object.values(pcMap).forEach(p => p.close());
-  if (localStream) localStream.getTracks().forEach(t => t.stop());
-  wsSend({ type: 'room_ended' });
+  localStream?.getTracks().forEach(t => t.stop());
+  wsSend({type:'room_ended'});
   if (ws) ws.close();
   stopTimer();
   endedEl.classList.add('show');
-  endDurEl.textContent = _secs > 0 ? `Duration: ${dur}` : '';
+  endDurEl.textContent = _s > 0 ? `Duration: ${dur}` : '';
   setTimeout(() => {
-    try { if (TG?.initData) TG.close(); } catch (_) {}
+    try { if (TG?.initData) TG.close(); } catch(_){}
     window.close();
     setTimeout(() => window.history.back(), 400);
-  }, 1600);
+  }, 1800);
 }
 
-// ── Dock render ──────────────────────────────────────────
-function renderDock() {
-  const row = document.getElementById('dock-row');
-  if (!row) return;
-  if (isSpy) {
-    row.innerHTML = `<span style="font-size:11px;font-weight:700;letter-spacing:.08em;color:rgba(255,59,92,.85);text-transform:uppercase">👁 SPY MODE</span>`;
-    return;
+// ── Draggable PiP ─────────────────────────────────────
+(function(){
+  const el = pipEl;
+  let sx,sy,sl,st,drag=false;
+  function start(x,y){
+    const r=el.getBoundingClientRect();
+    sx=x;sy=y;sl=r.left;st=r.top;
+    el.style.left=sl+'px';el.style.top=st+'px';
+    el.style.right='auto';el.style.bottom='auto';
+    drag=true;
   }
-  row.innerHTML = `
-    ${camOn ? `<button class="btn" id="btn-flip" onclick="flipCam()">
-      <svg viewBox="0 0 24 24"><path d="M1 4v6h6"/><path d="M23 20v-6h-6"/><path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4-4.64 4.36A9 9 0 0 1 3.51 15"/></svg>
-      <span class="btn-lbl">Flip</span>
-    </button>` : '<div style="width:58px"></div>'}
-    <button class="btn ${camOn ? '' : 'off'}" id="btn-cam" onclick="toggleCam()">
-      ${camOn
-        ? `<svg viewBox="0 0 24 24"><path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/></svg>`
-        : `<svg viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16"/><path d="M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.12 14.12A3 3 0 0 1 9.88 9.88"/></svg>`}
-      <span class="btn-lbl">${camOn ? 'Camera' : 'Camera'}</span>
-    </button>
-    <button class="btn ${micOn ? '' : 'off'}" id="btn-mic" onclick="toggleMic()">
-      ${micOn
-        ? `<svg viewBox="0 0 24 24"><path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`
-        : `<svg viewBox="0 0 24 24"><line x1="2" x2="22" y1="2" y2="22"/><path d="M18.89 13.23A7.12 7.12 0 0 0 19 12v-2"/><path d="M5 10v2a7 7 0 0 0 12 5"/><path d="M15 9.34V5a3 3 0 0 0-5.68-1.33"/><path d="M9 9v3a3 3 0 0 0 5.12 2.12"/><line x1="12" x2="12" y1="19" y2="22"/></svg>`}
-      <span class="btn-lbl">${micOn ? 'Mute' : 'Unmute'}</span>
-    </button>
-    <button class="btn btn-end" onclick="endCall()">
-      <svg viewBox="0 0 24 24"><path d="M10.68 13.31a16 16 0 0 0 3.41 2.6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7 2 2 0 0 1 1.72 2v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.42 19.42 0 0 1-3.33-2.67m-2.67-3.34a19.79 19.79 0 0 1-3.07-8.63A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91"/><line x1="22" x2="2" y1="2" y2="22"/></svg>
-      <span class="btn-lbl">End</span>
-    </button>`;
-  // Add ripple to all buttons
-  row.querySelectorAll('.btn').forEach(b => b.addEventListener('pointerdown', e => {
-    const r = b.getBoundingClientRect(), d = Math.max(r.width, r.height), sp = document.createElement('span');
-    sp.className = 'rip'; Object.assign(sp.style, { width: d+'px', height: d+'px', left: (e.clientX-r.left-d/2)+'px', top: (e.clientY-r.top-d/2)+'px' });
-    b.append(sp); sp.addEventListener('animationend', () => sp.remove());
-  }));
-}
-
-// ── Draggable PiP ─────────────────────────────────────────
-function makeDraggable(el) {
-  let sx, sy, sl, st, dragging = false;
-  function start(x, y) {
-    const r = el.getBoundingClientRect();
-    sx = x; sy = y; sl = r.left; st = r.top;
-    el.style.left = sl+'px'; el.style.top = st+'px';
-    el.style.right = 'auto'; el.style.bottom = 'auto';
-    dragging = true;
+  function move(x,y){
+    if(!drag)return;
+    el.style.left=Math.max(8,Math.min(sl+x-sx,innerWidth-el.offsetWidth-8))+'px';
+    el.style.top=Math.max(8,Math.min(st+y-sy,innerHeight-el.offsetHeight-8))+'px';
   }
-  function move(x, y) {
-    if (!dragging) return;
-    el.style.left = Math.max(8, Math.min(sl+x-sx, innerWidth-el.offsetWidth-8))+'px';
-    el.style.top  = Math.max(8, Math.min(st+y-sy, innerHeight-el.offsetHeight-8))+'px';
-  }
-  const end = () => dragging = false;
-  el.addEventListener('mousedown', e => { start(e.clientX, e.clientY); e.preventDefault(); });
-  window.addEventListener('mousemove', e => move(e.clientX, e.clientY));
-  window.addEventListener('mouseup', end);
-  el.addEventListener('touchstart', e => { const t = e.touches[0]; start(t.clientX, t.clientY); }, { passive: true });
-  window.addEventListener('touchmove', e => { if (!dragging) return; const t = e.touches[0]; move(t.clientX, t.clientY); e.preventDefault(); }, { passive: false });
-  window.addEventListener('touchend', end);
-}
-makeDraggable(pipEl);
+  function end(){drag=false;}
+  el.addEventListener('mousedown',e=>{start(e.clientX,e.clientY);e.preventDefault();});
+  window.addEventListener('mousemove',e=>move(e.clientX,e.clientY));
+  window.addEventListener('mouseup',end);
+  el.addEventListener('touchstart',e=>{const t=e.touches[0];start(t.clientX,t.clientY);},{passive:true});
+  window.addEventListener('touchmove',e=>{if(!drag)return;const t=e.touches[0];move(t.clientX,t.clientY);e.preventDefault();},{passive:false});
+  window.addEventListener('touchend',end);
+})();
 
-// ── Auto-hide controls on video ──────────────────────────
-let hideT;
-function showControls() { hudEl.classList.add('show'); dockEl.classList.add('show'); /* dock is always show when active */ }
-function schedHide() {
-  clearTimeout(hideT);
-  if (!remoteVid.srcObject) return; // don't hide in audio mode
-  hideT = setTimeout(() => hudEl.classList.remove('show'), 4000);
-}
-['touchstart','mousedown'].forEach(ev => document.addEventListener(ev, () => { if (remoteVid.srcObject) { hudEl.classList.add('show'); schedHide(); } }, { passive: true }));
-
-// ── WebSocket ─────────────────────────────────────────────
+// ── WebSocket ─────────────────────────────────────────
 function connectWS() {
-  const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+  const proto = location.protocol==='https:'?'wss':'ws';
   ws = new WebSocket(`${proto}://${location.host}/ws/${ROOM_ID}?role=${ROLE}&token=${TOKEN}`);
   ws.onopen = () => {};
-  ws.onmessage = async e => { let d; try { d = JSON.parse(e.data); } catch { return; } await handle(d); };
+  ws.onmessage = async e => { let d; try{d=JSON.parse(e.data);}catch{return;} await handle(d); };
   ws.onclose = () => {
-    Object.values(pcMap).forEach(p => { try { p.close(); } catch (_) {} });
-    Object.keys(pcMap).forEach(k => delete pcMap[k]);
+    Object.values(pcMap).forEach(p=>{try{p.close();}catch(_){}});
+    Object.keys(pcMap).forEach(k=>delete pcMap[k]);
     setTimeout(connectWS, 3000);
   };
+  ws.onerror = () => {};
 }
-function wsSend(d) { if (ws?.readyState === WebSocket.OPEN) ws.send(JSON.stringify(d)); }
+function wsSend(d){ if(ws?.readyState===WebSocket.OPEN) ws.send(JSON.stringify(d)); }
 
-// ── Signaling ─────────────────────────────────────────────
+// ── Signaling ─────────────────────────────────────────
 async function handle(d) {
-  switch (d.type) {
+  switch(d.type) {
     case 'room_state':
       myId = d.peer_id;
-      if (isCaller) d.peers.filter(p => !p.startsWith('spy_')).forEach(p => createPeer(p, true));
-      else if (isSpy) d.peers.forEach(p => createPeer(p, true));
+      if (isCaller) d.peers.filter(p=>!p.startsWith('spy_')).forEach(p=>createPeer(p,true));
+      else if (isSpy) d.peers.forEach(p=>createPeer(p,true));
       break;
-
     case 'peer_joined':
-      if (d.peer_id === myId) break;
-      if (isCaller || isSpy) createPeer(d.peer_id, true);
-      else createPeer(d.peer_id, false);
+      if (d.peer_id===myId) break;
+      if (isCaller||isSpy) createPeer(d.peer_id,true);
+      else createPeer(d.peer_id,false);
       break;
-
     case 'peer_left':
-      if (pcMap[d.peer_id]) { pcMap[d.peer_id].close(); delete pcMap[d.peer_id]; }
+      if (pcMap[d.peer_id]){pcMap[d.peer_id].close();delete pcMap[d.peer_id];}
       delete candidateQueue[d.peer_id];
       if (isSpy) removeTile(d.peer_id);
-      else onWaiting();
+      else {
+        // Partner left — reset to waiting state
+        waStatus.textContent = 'Waiting for partner…';
+        waTimer.style.display='none'; stopTimer();
+        switchToAudio();
+      }
       break;
-
     case 'offer':
-      if (d.to !== myId) break;
+      if (d.to!==myId) break;
       {
         const pc = createPeer(d.from, false);
         try {
           await pc.setRemoteDescription(new RTCSessionDescription(d.sdp));
-          drainCandidates(d.from);
-          const a = await pc.createAnswer({ voiceActivityDetection: false });
-          const sdp = preferCodecs(preferCodecs(a.sdp,'video'),'audio');
-          await pc.setLocalDescription({ type: a.type, sdp });
-          wsSend({ type: 'answer', to: d.from, sdp: pc.localDescription });
-        } catch (e) { console.error(e); }
+          drainQ(d.from);
+          const a = await pc.createAnswer({voiceActivityDetection:false});
+          const sdp = fixSdp(fixSdp(a.sdp,'video'),'audio');
+          await pc.setLocalDescription({type:a.type,sdp});
+          wsSend({type:'answer',to:d.from,sdp:pc.localDescription});
+        } catch(e){console.error(e);}
       }
       break;
-
     case 'answer':
-      if (d.to !== myId) break;
-      try {
-        await pcMap[d.from]?.setRemoteDescription(new RTCSessionDescription(d.sdp));
-        drainCandidates(d.from);
-      } catch (e) { console.error(e); }
+      if (d.to!==myId) break;
+      try { await pcMap[d.from]?.setRemoteDescription(new RTCSessionDescription(d.sdp)); drainQ(d.from); }
+      catch(e){console.error(e);}
       break;
-
     case 'candidate':
-      if (d.to !== myId) break;
+      if (d.to!==myId) break;
       try {
-        const pc = pcMap[d.from];
+        const pc=pcMap[d.from];
         if (pc?.remoteDescription?.type) await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
-        else { if (!candidateQueue[d.from]) candidateQueue[d.from] = []; candidateQueue[d.from].push(d.candidate); }
-      } catch (_) {}
+        else { if(!candidateQueue[d.from]) candidateQueue[d.from]=[]; candidateQueue[d.from].push(d.candidate); }
+      } catch(_){}
       break;
-
-    case 'room_ended':
-      endCall();
-      break;
+    case 'room_ended': endCall(); break;
   }
 }
 
-// ── Spy tiles ─────────────────────────────────────────────
-const spyTiles = {};
-function updateGrid() {
-  const n = Object.keys(spyTiles).length;
-  spyGrid.className = 'p' + Math.max(1, Math.min(n, 4));
+// ── Spy tiles ─────────────────────────────────────────
+const spyTiles={};
+function updateGrid(){const n=Object.keys(spyTiles).length;spyGrid.className='p'+Math.max(1,Math.min(n,4));}
+function getOrCreateTile(rid){
+  if(spyTiles[rid])return spyTiles[rid];
+  const tile=document.createElement('div');tile.className='spy-tile';
+  const vid=document.createElement('video');vid.autoplay=true;vid.playsInline=true;vid.muted=true;
+  const aud=document.createElement('audio');aud.autoplay=true;
+  const ph=document.createElement('div');ph.className='spy-ph';ph.textContent='👤';
+  const lbl=document.createElement('div');lbl.className='spy-lbl';lbl.textContent=rid.slice(0,10)+'…';
+  tile.append(vid,aud,ph,lbl);spyGrid.appendChild(tile);
+  const t={tile,vid,aud,ph,lbl};spyTiles[rid]=t;updateGrid();return t;
 }
-function getOrCreateTile(rid) {
-  if (spyTiles[rid]) return spyTiles[rid];
-  const tile = document.createElement('div'); tile.className = 'spy-tile';
-  const vid = document.createElement('video'); vid.autoplay = true; vid.playsInline = true; vid.muted = true;
-  const aud = document.createElement('audio'); aud.autoplay = true;
-  const ph = document.createElement('div'); ph.className = 'spy-ph'; ph.innerHTML = '<div style="font-size:28px;opacity:.3">👤</div>';
-  const lbl = document.createElement('div'); lbl.className = 'spy-lbl'; lbl.textContent = rid.slice(0,10)+'…';
-  tile.append(vid, aud, ph, lbl);
-  spyGrid.appendChild(tile);
-  const t = { tile, vid, aud, ph, lbl };
-  spyTiles[rid] = t; updateGrid(); return t;
-}
-function removeTile(rid) {
-  if (!spyTiles[rid]) return;
-  spyTiles[rid].tile.remove(); delete spyTiles[rid]; updateGrid();
-}
+function removeTile(rid){if(!spyTiles[rid])return;spyTiles[rid].tile.remove();delete spyTiles[rid];updateGrid();}
 
-// ── Session start ─────────────────────────────────────────
+// ── Start session ─────────────────────────────────────
 async function startSession() {
   document.getElementById('splash').style.display = 'none';
-  document.getElementById('open-banner').classList.remove('show');
-  audioView.classList.remove('hide');
-  dockEl.classList.add('show');
-  renderDock();
+  audioBg.style.display = 'flex';
+  ctrlEl.classList.add('show');
+  buildControls();
+  waStatus.textContent = 'Waiting for partner…';
 
-  // Pre-unlock audio/video elements during user gesture
-  remoteVid.play().catch(() => {});
-  remoteAud.play().catch(() => {});
+  // Unlock audio/video autoplay inside user gesture
+  remoteVid.play().catch(()=>{});
+  remoteAud.play().catch(()=>{});
 
-  await fetchIceServers();
+  await fetchIce();
 
   if (!isSpy) {
     try {
-      // Audio only first
       localStream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, sampleRate: { ideal: 48000 }, channelCount: 1 }
+        audio:{ echoCancellation:true, noiseSuppression:true, autoGainControl:true, sampleRate:{ideal:48000} }
       });
-    } catch (e) {
-      console.error('Audio denied:', e);
-      localStream = new MediaStream(); // empty stream, continue
+    } catch(e) {
+      console.error('Mic denied:', e);
+      localStream = new MediaStream();
     }
   }
-
   connectWS();
-  schedHide();
 }
 
-// Auto-start for spy
 if (isSpy) startSession();
 </script>
 </body>
