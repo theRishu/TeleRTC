@@ -757,8 +757,7 @@
 </div>
 
 <script>
-    // Hide PiP entirely if spy
-    if (ROLE === 'spy') {
+    if ("{{ role }}" === 'spy') {
         const style = document.createElement('style');
         style.textContent = '#pip { display: none !important; }';
         document.head.appendChild(style);
@@ -856,42 +855,57 @@
     function showWait() { waitEl.classList.add('show'); }
     function hideWait() { waitEl.classList.remove('show'); }
 
-    // ── ICE servers ──────────────────────────────────────────
-    const RTC = {
-        iceServers: [
-            { urls: 'stun:stun.l.google.com:19302' },
-            { urls: 'stun:stun1.l.google.com:19302' },
-            { urls: 'stun:stun2.l.google.com:19302' },
-            { urls: 'stun:stun3.l.google.com:19302' },
-            { urls: 'stun:stun4.l.google.com:19302' },
-            { urls: 'stun:global.stun.twilio.com:3478' },
-            {
-                urls: [
-                    'turn:openrelay.metered.ca:80',
-                    'turn:openrelay.metered.ca:443',
-                    'turn:openrelay.metered.ca:443?transport=tcp',
-                ],
-                username: 'openrelayproject',
-                credential: 'openrelayproject',
-            },
-        ],
+    // ── ICE servers (fetched from server, fallback to STUN only) ─
+    let RTC = {
+        iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
         iceCandidatePoolSize: 10,
-        bundlePolicy: 'max-bundle'
+        bundlePolicy: 'max-bundle',
+        sdpSemantics: 'unified-plan'
     };
 
-    // ── H.264 first for iOS ──────────────────────────────────
-    // This function is no longer needed as modern browsers handle codec negotiation better.
-    // function h264(sdp) {
-    //     if (!sdp) return sdp;
-    //     const ids = [], ls = sdp.split('\r\n');
-    //     ls.forEach(l => { if (l.includes('H264')) { const m = l.match(/:(\d+) /); if (m) ids.push(m[1]); } });
-    //     if (!ids.length) return sdp;
-    //     return ls.map(l => {
-    //         if (!l.startsWith('m=video')) return l;
-    //         const p = l.split(' ');
-    //         return [...p.slice(0, 3), ...ids, ...p.slice(3).filter(x => !ids.includes(x))].join(' ');
-    //     }).join('\r\n');
-    // }
+    async function fetchIceServers() {
+        try {
+            const r = await fetch(`/api/ice_servers?token=${TOKEN}`);
+            if (r.ok) { RTC = await r.json(); log('ICE servers loaded'); }
+        } catch (_) { log('Using fallback STUN'); }
+    }
+
+    // ── Prefer VP9 > H264 > VP8 for video, opus for audio ───
+    function preferCodecs(sdp, kind) {
+        const lines = sdp.split('\r\n');
+        const mIdx = lines.findIndex(l => l.startsWith(`m=${kind}`));
+        if (mIdx === -1) return sdp;
+        const order = kind === 'video' ? ['VP9', 'H264', 'VP8'] : ['opus'];
+        const payloads = [];
+        order.forEach(codec => {
+            lines.forEach(l => {
+                const m = l.match(/^a=rtpmap:(\d+) ([^/\s]+)/i);
+                if (m && m[2].toUpperCase() === codec && !payloads.includes(m[1])) payloads.push(m[1]);
+            });
+        });
+        const parts = lines[mIdx].split(' ');
+        const rest = parts.slice(3).filter(p => !payloads.includes(p));
+        lines[mIdx] = [...parts.slice(0, 3), ...payloads, ...rest].join(' ');
+        return lines.join('\r\n');
+    }
+
+    // ── Boost bitrate after ICE connects ────────────────────
+    async function setHighBitrate(pc) {
+        for (const sender of pc.getSenders()) {
+            if (!sender.track) continue;
+            try {
+                const p = sender.getParameters();
+                if (!p.encodings || !p.encodings.length) p.encodings = [{}];
+                if (sender.track.kind === 'video') {
+                    p.encodings[0].maxBitrate = 2500000;
+                    p.encodings[0].maxFramerate = 30;
+                } else {
+                    p.encodings[0].maxBitrate = 128000;
+                }
+                await sender.setParameters(p);
+            } catch (e) { log(`Bitrate: ${e.message}`); }
+        }
+    }
 
     // ── Spy tiles ────────────────────────────────────────────
     const spyTiles = {};
@@ -967,20 +981,24 @@
 
         pc.ontrack = e => {
             log(`Track: ${e.track.kind}`);
-            const stream = (e.streams && e.streams[0]) ? e.streams[0] : new MediaStream([e.track]);
+            const ms = new MediaStream([e.track]);
             if (isSpy) {
                 const tile = getOrCreateTile(rid);
                 if (e.track.kind === 'video') {
-                    tile.vid.srcObject = stream;
+                    tile.vid.srcObject = ms;
+                    tile.vid.play().catch(() => { });
                     tile.ph.style.display = 'none';
-                } else tile.aud.srcObject = stream;
+                } else {
+                    tile.aud.srcObject = ms;
+                    tile.aud.play().catch(() => { });
+                }
             } else {
                 if (e.track.kind === 'video') {
-                    remoteVid.srcObject = stream;
+                    remoteVid.srcObject = ms;
                     remoteVid.play().catch(() => { });
                     hideWait(); setStatus('🟢 Connected', 'connected'); startTimer();
                 } else {
-                    remoteAud.srcObject = stream;
+                    remoteAud.srcObject = ms;
                     remoteAud.play().catch(() => { });
                 }
             }
@@ -990,6 +1008,7 @@
             log(`ICE: ${pc.iceConnectionState}`);
             if (pc.iceConnectionState === 'connected' || pc.iceConnectionState === 'completed') {
                 if (!isSpy) { setStatus('🟢 Connected', 'connected'); hideWait(); }
+                setHighBitrate(pc);
             }
             if ((pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'disconnected') && init) {
                 log('ICE dropped, restarting...');
@@ -1005,8 +1024,9 @@
             pc.onnegotiationneeded = async () => {
                 try {
                     makingOffer = true;
-                    const o = await pc.createOffer();
-                    await pc.setLocalDescription(o);
+                    const o = await pc.createOffer({ voiceActivityDetection: false });
+                    const sdp = preferCodecs(preferCodecs(o.sdp, 'video'), 'audio');
+                    await pc.setLocalDescription({ type: o.type, sdp });
                     wsSend({ type: 'offer', to: rid, sdp: pc.localDescription });
                 } catch (err) {
                     log(`Offer err: ${err.message}`);
@@ -1036,6 +1056,8 @@
         };
         ws.onclose = () => {
             console.warn('[WS] Closed. Retrying in 3s...');
+            Object.values(pcMap).forEach(p => { try { p.close(); } catch (_) {} });
+            Object.keys(pcMap).forEach(k => delete pcMap[k]);
             setTimeout(connectWS, 3000);
         };
         ws.onerror = err => console.error('[WS] Error:', err);
@@ -1074,7 +1096,15 @@
             case 'peer_left':
                 const pID = d.peer_id;
                 if (pcMap[pID]) { pcMap[pID].close(); delete pcMap[pID]; }
-                if (isSpy) removeTile(pID);
+                if (isSpy) {
+                    removeTile(pID);
+                } else {
+                    remoteVid.srcObject = null;
+                    remoteAud.srcObject = null;
+                    stopTimer();
+                    setStatus('⏳ Waiting…', 'waiting');
+                    showWait();
+                }
                 break;
 
             case 'offer':
@@ -1084,8 +1114,9 @@
                     try {
                         await peer.setRemoteDescription(new RTCSessionDescription(d.sdp));
                         drainCandidates(d.from);
-                        const a = await peer.createAnswer();
-                        await peer.setLocalDescription(a);
+                        const a = await peer.createAnswer({ voiceActivityDetection: false });
+                        const sdp = preferCodecs(preferCodecs(a.sdp, 'video'), 'audio');
+                        await peer.setLocalDescription({ type: a.type, sdp });
                         wsSend({ type: 'answer', to: d.from, sdp: peer.localDescription });
                     } catch (err) { log(`SDP Err: ${err.message}`); }
                 }
@@ -1160,12 +1191,11 @@
             let newStream;
             try {
                 newStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: { exact: facingMode }, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    video: { facingMode: { exact: facingMode }, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 15 } }
                 });
             } catch (e) {
-                // Fallback to non-exact if device doesn't perfectly match 'exact' constraint
                 newStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: facingMode, width: { ideal: 1280 }, height: { ideal: 720 } }
+                    video: { facingMode: facingMode, width: { ideal: 1280, min: 640 }, height: { ideal: 720, min: 480 }, frameRate: { ideal: 30, min: 15 } }
                 });
             }
 
@@ -1303,8 +1333,10 @@
     async function startSession() {
         document.getElementById('splash').style.display = 'none';
         renderDock();
+        if (!isSpy) showWait();
 
         log("Starting Session...");
+        await fetchIceServers();
 
         // 2. Pre-play DURING user gesture window — UNLOCKS future audio.play() calls
         remoteVid.play().catch(() => { });
@@ -1315,8 +1347,19 @@
             try {
                 log("Requesting Camera...");
                 localStream = await navigator.mediaDevices.getUserMedia({
-                    video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } },
-                    audio: true
+                    video: {
+                        facingMode: 'user',
+                        width: { ideal: 1280, min: 640 },
+                        height: { ideal: 720, min: 480 },
+                        frameRate: { ideal: 30, min: 15 }
+                    },
+                    audio: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                        sampleRate: { ideal: 48000 },
+                        channelCount: 1
+                    }
                 });
                 localVid.srcObject = localStream;
                 localVid.play().catch(() => { });
@@ -1324,7 +1367,13 @@
             } catch (err) {
                 log(`Media Error: ${err.name}`);
                 try {
-                    localStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                    localStream = await navigator.mediaDevices.getUserMedia({
+                        audio: {
+                            echoCancellation: true,
+                            noiseSuppression: true,
+                            autoGainControl: true
+                        }
+                    });
                     camOff.classList.add('show');
                 } catch (e) { log("Mic access denied."); }
             }

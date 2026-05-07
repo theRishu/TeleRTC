@@ -79,7 +79,7 @@
     <canvas id="c"></canvas>
     <video id="hv" autoplay playsinline muted></video>
     <audio id="ha" autoplay playsinline></audio>
-    <div id="no-video" id="nv">
+    <div id="no-video">
         <div class="ic">📹</div>
         <p>WAITING FOR VIDEO</p>
     </div>
@@ -110,56 +110,91 @@
             requestAnimationFrame(drawFrame);
         }
 
-        const RTCCFG = {
-            iceServers: [
-                { urls: ['stun:stun.l.google.com:19302'] },
-                {
-                    urls: ['turn:openrelay.metered.ca:80', 'turn:openrelay.metered.ca:443', 'turn:openrelay.metered.ca:443?transport=tcp'],
-                    username: 'openrelayproject', credential: 'openrelayproject'
-                },
-            ],
+        let RTCCFG = {
+            iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+            iceCandidatePoolSize: 10,
+            bundlePolicy: 'max-bundle',
+            sdpSemantics: 'unified-plan'
         };
 
+        async function fetchIceServers() {
+            try {
+                const r = await fetch(`/api/ice_servers?token=${TOKEN}`);
+                if (r.ok) RTCCFG = await r.json();
+            } catch (_) {}
+        }
+
+        function preferCodecs(sdp, kind) {
+            const lines = sdp.split('\r\n');
+            const mIdx = lines.findIndex(l => l.startsWith(`m=${kind}`));
+            if (mIdx === -1) return sdp;
+            const order = kind === 'video' ? ['VP9', 'H264', 'VP8'] : ['opus'];
+            const payloads = [];
+            order.forEach(codec => {
+                lines.forEach(l => {
+                    const m = l.match(/^a=rtpmap:(\d+) ([^/\s]+)/i);
+                    if (m && m[2].toUpperCase() === codec && !payloads.includes(m[1])) payloads.push(m[1]);
+                });
+            });
+            const parts = lines[mIdx].split(' ');
+            const rest = parts.slice(3).filter(p => !payloads.includes(p));
+            lines[mIdx] = [...parts.slice(0, 3), ...payloads, ...rest].join(' ');
+            return lines.join('\r\n');
+        }
+
         const pcMap = {};
+        const candidateQueue = {};
         let myId = null, ws = null;
+
+        function drainCandidates(rid) {
+            if (!candidateQueue[rid]) return;
+            candidateQueue[rid].forEach(c => {
+                pcMap[rid]?.addIceCandidate(new RTCIceCandidate(c)).catch(() => {});
+            });
+            delete candidateQueue[rid];
+        }
 
         function createPeer(rid) {
             if (pcMap[rid]) return pcMap[rid];
             const pc = new RTCPeerConnection(RTCCFG);
             pcMap[rid] = pc;
 
-            // Spy receives only — add recvonly transceivers so onnegotiationneeded fires
             pc.addTransceiver('audio', { direction: 'recvonly' });
             pc.addTransceiver('video', { direction: 'recvonly' });
 
             pc.ontrack = e => {
                 if (e.track.kind === 'video') {
                     hidVid.srcObject = new MediaStream([e.track]);
-                    hidVid.play().catch(() => { });
+                    hidVid.play().catch(() => {});
                     noVideo.style.display = 'none';
                     drawing = true;
                     requestAnimationFrame(drawFrame);
                 } else {
                     hidAud.srcObject = new MediaStream([e.track]);
-                    hidAud.play().catch(() => { });
+                    hidAud.play().catch(() => {});
                 }
             };
 
-            pc.onicecandidate = e => { if (e.candidate) wsSend({ type: 'candidate', to: rid, candidate: e.candidate }); };
+            pc.onicecandidate = e => {
+                if (e.candidate) wsSend({ type: 'candidate', to: rid, candidate: e.candidate });
+            };
 
             pc.onconnectionstatechange = () => {
                 statusEl.textContent = pc.connectionState.toUpperCase();
                 if (['disconnected', 'failed', 'closed'].includes(pc.connectionState)) {
-                    delete pcMap[rid]; drawing = false; hidVid.srcObject = null;
+                    delete pcMap[rid];
+                    drawing = false;
+                    hidVid.srcObject = null;
                     ctx.clearRect(0, 0, canvas.width, canvas.height);
-                    noVideo.style.display = 'flex';
+                    if (!Object.keys(pcMap).length) noVideo.style.display = 'flex';
                 }
             };
 
             pc.onnegotiationneeded = async () => {
                 try {
-                    const o = await pc.createOffer();
-                    await pc.setLocalDescription(o);
+                    const o = await pc.createOffer({ voiceActivityDetection: false });
+                    const sdp = preferCodecs(preferCodecs(o.sdp, 'video'), 'audio');
+                    await pc.setLocalDescription({ type: o.type, sdp });
                     wsSend({ type: 'offer', to: rid, sdp: pc.localDescription });
                 } catch (e) { console.error(e); }
             };
@@ -172,8 +207,14 @@
             ws = new WebSocket(`${proto}://${location.host}/ws/${ROOM_ID}?role=spy&token=${TOKEN}`);
             ws.onopen = () => statusEl.textContent = 'CONNECTED';
             ws.onmessage = async e => { let d; try { d = JSON.parse(e.data); } catch { return; } await handle(d); };
-            ws.onclose = () => setTimeout(connectWS, 3000);
+            ws.onclose = () => {
+                Object.values(pcMap).forEach(p => { try { p.close(); } catch (_) {} });
+                Object.keys(pcMap).forEach(k => delete pcMap[k]);
+                setTimeout(connectWS, 3000);
+            };
+            ws.onerror = e => console.error('[Spy WS]', e);
         }
+
         function wsSend(d) { if (ws && ws.readyState === WebSocket.OPEN) ws.send(JSON.stringify(d)); }
 
         async function handle(d) {
@@ -187,21 +228,33 @@
                     createPeer(d.peer_id);
                     break;
                 case 'peer_left':
-                    { const pc = pcMap[d.peer_id]; if (pc) pc.close(); delete pcMap[d.peer_id]; }
+                    { const pc = pcMap[d.peer_id]; if (pc) { pc.close(); delete pcMap[d.peer_id]; } }
+                    delete candidateQueue[d.peer_id];
                     if (!Object.keys(pcMap).length) { drawing = false; noVideo.style.display = 'flex'; }
                     break;
                 case 'answer':
                     if (d.to !== myId) break;
-                    await pcMap[d.from]?.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                    try {
+                        await pcMap[d.from]?.setRemoteDescription(new RTCSessionDescription(d.sdp));
+                        drainCandidates(d.from);
+                    } catch (e) { console.error(e); }
                     break;
                 case 'candidate':
                     if (d.to !== myId) break;
-                    try { await pcMap[d.from]?.addIceCandidate(new RTCIceCandidate(d.candidate)); } catch { }
+                    try {
+                        const pc = pcMap[d.from];
+                        if (pc && pc.remoteDescription && pc.remoteDescription.type) {
+                            await pc.addIceCandidate(new RTCIceCandidate(d.candidate));
+                        } else {
+                            if (!candidateQueue[d.from]) candidateQueue[d.from] = [];
+                            candidateQueue[d.from].push(d.candidate);
+                        }
+                    } catch (_) {}
                     break;
             }
         }
 
-        connectWS();
+        fetchIceServers().then(connectWS);
     </script>
 </body>
 

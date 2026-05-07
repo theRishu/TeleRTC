@@ -2,6 +2,10 @@ import os
 import base64
 import secrets
 import asyncio
+import hmac
+import hashlib
+import time
+from contextlib import asynccontextmanager
 from datetime import datetime
 from typing import Dict
 
@@ -60,6 +64,34 @@ body{min-height:100vh;display:flex;align-items:center;justify-content:center;
 #  Config
 # ══════════════════════════════════════════════════════
 ADMIN_PASSWORD = os.getenv("ADMIN_PASSWORD", "rishu")
+TURN_HOST      = os.getenv("TURN_HOST", "")       # VPS IP, e.g. "66.23.199.133"
+TURN_SECRET    = os.getenv("TURN_SECRET", "")     # must match coturn static-auth-secret
+
+def _turn_credentials() -> dict | None:
+    """Return time-limited HMAC ICE server config, or None if TURN not configured."""
+    if not TURN_HOST or not TURN_SECRET:
+        return None
+    expiry   = str(int(time.time()) + 86400)          # expires in 24 h
+    username = f"{expiry}:telertc"
+    password = base64.b64encode(
+        hmac.new(TURN_SECRET.encode(), username.encode(), hashlib.sha1).digest()
+    ).decode()
+    return {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
+            {
+                "urls": [
+                    f"turn:{TURN_HOST}:3478",
+                    f"turn:{TURN_HOST}:3478?transport=tcp",
+                ],
+                "username": username,
+                "credential": password,
+            },
+        ],
+        "iceCandidatePoolSize": 10,
+        "bundlePolicy": "max-bundle",
+        "sdpSemantics": "unified-plan",
+    }
 
 # ══════════════════════════════════════════════════════
 #  Data models
@@ -102,9 +134,39 @@ tokens: Dict[str, dict]    = {}           # token    -> {room_id, role}
 ws_connections: Dict[str, Dict[str, WebSocket]] = {}  # room_id -> {peer_id: ws}
 
 # ══════════════════════════════════════════════════════
+#  Background housekeeping
+# ══════════════════════════════════════════════════════
+WAITING_TIMEOUT  = 15 * 60   # 15 min — kill rooms where callee never joined
+ENDED_TTL        = 5  * 60   # 5 min  — sweep fully-ended rooms
+
+async def _housekeeping():
+    """Periodically remove stale rooms so memory doesn't grow unbounded."""
+    while True:
+        await asyncio.sleep(60)
+        now = datetime.now()
+        stale = []
+        for room_id, room in list(rooms.items()):
+            age = (now - room.created_at).total_seconds()
+            if room.status == "ended":
+                if age > ENDED_TTL:
+                    stale.append(room_id)
+            elif room.status == "waiting" and age > WAITING_TIMEOUT:
+                stale.append(room_id)
+        for room_id in stale:
+            asyncio.create_task(_cleanup_room(room_id, delay=0))
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    task = asyncio.create_task(_housekeeping())
+    yield
+    task.cancel()
+
+
+# ══════════════════════════════════════════════════════
 #  App
 # ══════════════════════════════════════════════════════
-app = FastAPI(title="TeleRTC")
+app = FastAPI(title="TeleRTC", lifespan=lifespan)
 
 
 # ─────────────────────────────────────────────────────
@@ -113,6 +175,27 @@ app = FastAPI(title="TeleRTC")
 @app.get("/", response_class=HTMLResponse)
 async def root():
     return HTMLResponse("it working")
+
+
+# ─────────────────────────────────────────────────────
+#  ICE server credentials  (called by call.html on load)
+# ─────────────────────────────────────────────────────
+@app.get("/api/ice_servers")
+async def ice_servers(token: str = Query("")):
+    if token not in tokens:
+        raise HTTPException(status_code=401, detail="Invalid token")
+    creds = _turn_credentials()
+    if creds:
+        return creds
+    # TURN not configured — return Google STUN only
+    return {
+        "iceServers": [
+            {"urls": ["stun:stun.l.google.com:19302", "stun:stun1.l.google.com:19302"]},
+        ],
+        "iceCandidatePoolSize": 10,
+        "bundlePolicy": "max-bundle",
+        "sdpSemantics": "unified-plan",
+    }
 
 
 # ─────────────────────────────────────────────────────
